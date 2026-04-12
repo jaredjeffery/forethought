@@ -3,6 +3,10 @@
 // Run `npm run db:migrate` to apply pending migrations to the database.
 
 import { defineConfig } from "drizzle-kit";
+import { config } from "dotenv";
+
+// Load .env.local so DATABASE_URL is available when running drizzle-kit commands
+config({ path: ".env.local" });
 
 export default defineConfig({
   schema: "./src/lib/db/schema.ts",
