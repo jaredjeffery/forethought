@@ -5,13 +5,11 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is not set");
-}
-
-// In serverless environments (Vercel), max: 1 prevents connection exhaustion.
-// For long-running scripts, this can be increased.
-const client = postgres(process.env.DATABASE_URL, {
+// DATABASE_URL must be set before any DB operation is called.
+// In Next.js this is enforced at startup; in scripts, load .env.local first
+// via --env-file (see npm scripts in package.json).
+const client = postgres(process.env.DATABASE_URL!, {
+  // In serverless environments (Vercel), max: 1 prevents connection exhaustion.
   max: process.env.NODE_ENV === "production" ? 1 : 10,
 });
 

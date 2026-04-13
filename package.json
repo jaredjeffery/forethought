@@ -10,9 +10,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "seed": "tsx scripts/seed-variables.ts",
-    "ingest:weo": "tsx scripts/ingest-imf-weo.ts",
-    "score": "tsx scripts/run-scoring.ts"
+    "seed": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/seed-variables.ts",
+    "ingest:weo": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/ingest-imf-weo.ts",
+    "ingest:wb": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/ingest-world-bank.ts",
+    "score": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/run-scoring.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
