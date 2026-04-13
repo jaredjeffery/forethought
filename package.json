@@ -13,6 +13,7 @@
     "seed": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/seed-variables.ts",
     "ingest:weo": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/ingest-imf-weo.ts",
     "ingest:wb": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/ingest-world-bank.ts",
+    "consensus": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/run-consensus.ts",
     "score": "node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/run-scoring.ts"
   },
   "dependencies": {

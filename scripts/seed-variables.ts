@@ -5,8 +5,7 @@
 // Countries: world/regional aggregates + top 20 economies + key emerging markets.
 // Forecasters: major institutional forecasters seeded without accounts.
 
-import { config } from "dotenv";
-config({ path: ".env.local" });
+// DATABASE_URL and other env vars are loaded via --env-file=.env.local in package.json
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
