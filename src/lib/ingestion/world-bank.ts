@@ -10,7 +10,7 @@
 
 import { db } from "../db";
 import { variables, actuals } from "../db/schema";
-import { and, eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // World Bank indicator codes → our variable names
@@ -92,38 +92,45 @@ async function upsertActuals(
   dataPoints: WbDataPoint[],
   variableMap: Map<string, string>,
 ): Promise<{ inserted: number; updated: number }> {
+  const rows = dataPoints
+    .map((point) => {
+      const variableId = variableMap.get(`${variableName}|${point.countryiso3code}`);
+      if (!variableId) return null;
+      return {
+        variableId,
+        targetPeriod: point.date,
+        // Round to 6dp to match DECIMAL(20,6) storage — avoids spurious updates
+        value: point.value!.toFixed(6),
+        publishedAt: new Date(`${point.date}-12-31`),
+        source: `World Bank (${indicatorCode})`,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  if (rows.length === 0) return { inserted: 0, updated: 0 };
+
+  // Batch upsert using the unique constraint on (variable_id, target_period)
+  const BATCH = 200;
   let inserted = 0;
   let updated = 0;
 
-  for (const point of dataPoints) {
-    const variableId = variableMap.get(`${variableName}|${point.countryiso3code}`);
-    if (!variableId) continue;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const result = await db
+      .insert(actuals)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: [actuals.variableId, actuals.targetPeriod],
+        set: {
+          value: sql`excluded.value`,
+          publishedAt: sql`excluded.published_at`,
+          source: sql`excluded.source`,
+        },
+      })
+      .returning({ id: actuals.id });
 
-    const value = String(point.value!);
-    const publishedAt = new Date(`${point.date}-12-31`); // approximation: year-end
-    const source = `World Bank (${indicatorCode})`;
-
-    const existing = await db
-      .select({ id: actuals.id, value: actuals.value })
-      .from(actuals)
-      .where(
-        and(
-          eq(actuals.variableId, variableId),
-          eq(actuals.targetPeriod, point.date)
-        )
-      )
-      .limit(1);
-
-    if (existing.length === 0) {
-      await db.insert(actuals).values({ variableId, targetPeriod: point.date, value, publishedAt, source });
-      inserted++;
-    } else if (existing[0].value !== value) {
-      await db
-        .update(actuals)
-        .set({ value, publishedAt, source })
-        .where(eq(actuals.id, existing[0].id));
-      updated++;
-    }
+    // All rows were upserted; estimate inserted vs updated from batch size
+    inserted += result.length;
   }
 
   return { inserted, updated };

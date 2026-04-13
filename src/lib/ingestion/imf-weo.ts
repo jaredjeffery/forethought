@@ -24,7 +24,6 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { db } from "../db";
 import { forecasters, variables, forecasts } from "../db/schema";
-import { and, eq } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // WEO subject code → our variable name

@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# WEO data files (large — download manually per data/weo/README.md)
+/data/weo/*.txt
