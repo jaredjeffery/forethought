@@ -15,7 +15,7 @@
 
 import { db } from "../db";
 import { forecasts, actuals, consensusForecasts, forecastScores } from "../db/schema";
-import { eq, and, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Metric functions — pure, no DB access

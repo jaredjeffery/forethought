@@ -112,7 +112,7 @@ async function upsertActuals(
   // Batch upsert using the unique constraint on (variable_id, target_period)
   const BATCH = 200;
   let inserted = 0;
-  let updated = 0;
+  const updated = 0;
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
