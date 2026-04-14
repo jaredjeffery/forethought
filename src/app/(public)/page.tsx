@@ -45,7 +45,7 @@ export default async function LandingPage() {
   const latestActuals = new Map<string, string>();
   for (const a of gdpActuals) {
     if (!latestActuals.has(a.variableId)) {
-      latestActuals.set(a.variableId, `${a.value}% (${a.targetPeriod})`);
+      latestActuals.set(a.variableId, `${parseFloat(a.value).toFixed(2)}% (${a.targetPeriod})`);
     }
   }
 
