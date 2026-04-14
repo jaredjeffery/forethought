@@ -1,17 +1,21 @@
 // IMF WEO ingestion runner.
-// Reads local WEO tab-delimited files from data/weo/ and imports forecasts.
+// Reads local WEO files from data/weo/ and imports forecasts.
 //
-// BEFORE RUNNING: Download WEO files from IMF (see imf-weo.ts for instructions)
-// and place them in data/weo/. File names follow the pattern WEO[Mon][Year]all.txt.
+// BEFORE RUNNING: Download the WEO file from IMF (see imf-weo.ts for instructions)
+// and place it in data/weo/. New format (2025-Oct+): WEO[Mon][Year].csv
+// Legacy format (pre-2025-Oct): WEO[Mon][Year]all.txt + WEO[Mon][Year]alla.txt
 //
 // Ingests the latest available vintage by default, or specify with WEO_VINTAGE:
 //   WEO_VINTAGE=2025-Oct npm run ingest:weo
+//
+// To ingest all available vintages in one pass:
+//   WEO_ALL=1 npm run ingest:weo
 //
 // Run with: npm run ingest:weo
 
 // DATABASE_URL and other env vars are loaded via --env-file=.env.local in package.json
 
-import { ingestWeoVintage, listAvailableVintages, WEO_VINTAGES } from "../src/lib/ingestion/imf-weo";
+import { ingestWeoVintage, listAvailableVintages } from "../src/lib/ingestion/imf-weo";
 
 async function main() {
   const available = listAvailableVintages();
@@ -23,27 +27,43 @@ async function main() {
     process.exit(1);
   }
 
-  const targetLabel = process.env.WEO_VINTAGE ?? available[0].label;
-  const vintage = available.find((v) => v.label === targetLabel);
+  const ingestAll = process.env.WEO_ALL === "1";
+  const vintages = ingestAll
+    ? available
+    : [available.find((v) => v.label === (process.env.WEO_VINTAGE ?? available[0].label))].filter(Boolean) as typeof available;
 
-  if (!vintage) {
+  if (vintages.length === 0) {
+    const targetLabel = process.env.WEO_VINTAGE ?? available[0].label;
     console.error(`Vintage "${targetLabel}" not found or files missing.`);
     console.error(`Available: ${available.map((v) => v.label).join(", ")}`);
     process.exit(1);
   }
 
-  console.log(`Ingesting WEO ${vintage.label} from local files...`);
+  let totalInserted = 0;
+  let totalSkipped = 0;
 
-  try {
-    const result = await ingestWeoVintage(vintage);
-    console.log("\nIngestion complete:");
-    console.log(`  Forecasts inserted      : ${result.forecasts_inserted}`);
-    console.log(`  Rows skipped (no match) : ${result.skipped_no_variable}`);
-    process.exit(0);
-  } catch (err) {
-    console.error("\nIngestion failed:", err);
-    process.exit(1);
+  for (const vintage of vintages) {
+    console.log(`\nIngesting WEO ${vintage.label} from local files...`);
+    try {
+      const result = await ingestWeoVintage(vintage);
+      console.log(`  Forecasts inserted      : ${result.forecasts_inserted}`);
+      console.log(`  Rows skipped (no match) : ${result.skipped_no_variable}`);
+      totalInserted += result.forecasts_inserted;
+      totalSkipped += result.skipped_no_variable;
+    } catch (err) {
+      console.error(`\nIngestion failed for ${vintage.label}:`, err);
+      process.exit(1);
+    }
   }
+
+  if (vintages.length > 1) {
+    console.log(`\n${"=".repeat(50)}`);
+    console.log(`Total across ${vintages.length} vintages:`);
+    console.log(`  Forecasts inserted      : ${totalInserted}`);
+    console.log(`  Rows skipped (no match) : ${totalSkipped}`);
+  }
+
+  process.exit(0);
 }
 
 main();
