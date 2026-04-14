@@ -1,5 +1,39 @@
 # Forethought — Progress Log
 
+## Session 2026-04-14
+
+### Completed
+
+**Increment 9 — WEO data pipeline + deployment**
+- Added xlsx parser for IMF's new Oct-2025 Excel format (Countries + Country Groups sheets)
+- Fixed UTF-16 LE encoding detection for newer legacy files (IMF changed encoding ~2024, no BOM)
+- Updated `download_weo.py` to fetch `alla.txt` (Country Groups) files for all legacy editions
+- Added `WEO_ALL=1` flag to ingest runner for one-shot backfill across all vintages
+- Expanded `WEO_VINTAGES` to cover 2021–2025 (10 legacy vintages + Oct-2025 xlsx)
+- Backfilled 11 WEO vintages: 23,744 forecasts, 23,744 consensus rows, 5,174 scored
+- Deployed to Vercel; connected GitHub repo for auto-deploy on push
+- Fixed GDP decimal formatting on landing page (2 d.p.)
+
+### Current state
+
+- **Live site**: forethought-two.vercel.app
+- **Database**: 23,744 forecasts, 5,174 scored against actuals, 198 variables, 10 forecasters
+- **GitHub**: github.com/jaredjeffery/forethought (auto-deploys on push to main)
+- **Build**: clean, zero errors
+
+### Known issues
+
+- WLD (World) shows "—" on landing page — World Bank has no aggregate actuals; will populate once Apr 2026 WEO is ingested
+- Apr 2026 WEO not yet published (expected ~April 22)
+- Filter dropdowns on `/variables` require form submit (no JS auto-submit — Phase 2)
+- Government debt data from World Bank covers central government only; WEO covers general government
+
+### Next steps (ordered by priority)
+
+1. **Auth setup** — configure Auth.js (Google + LinkedIn), AUTH_SECRET in Vercel env vars
+2. **Analyst onboarding** — Phase 2: registration, profile pages, forecast submission form
+3. **Ingest Apr 2026 WEO** when published (~April 22) — run `WEO_ALL=1 npm run ingest:weo` then consensus + score
+
 ## Session 2026-04-13
 
 ### Completed
