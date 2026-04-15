@@ -98,7 +98,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
   const latestVintageByForecaster = new Map<string, string>(); // slug → max vintage
   for (const f of forecastRows) {
     const current = latestVintageByForecaster.get(f.forecasterSlug);
-    if (!current || f.vintage > current) {
+    if (f.vintage && (!current || f.vintage > current)) {
       latestVintageByForecaster.set(f.forecasterSlug, f.vintage);
     }
   }
