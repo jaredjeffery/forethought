@@ -92,10 +92,22 @@ export default async function VariableDetailPage({ params }: PageProps) {
   const actualByPeriod = new Map(actualRows.map((a) => [a.targetPeriod, parseFloat(a.value)]));
   const consensusByPeriod = new Map(consensusRows.map((c) => [c.targetPeriod, parseFloat(c.simpleMean)]));
 
-  // Use the latest vintage per forecaster per period for the chart
+  // Find the latest vintage published by each forecaster for this variable.
+  // The chart shows only that vintage — "what does the IMF currently say about 2027?"
+  // not a palimpsest of every past round.
+  const latestVintageByForecaster = new Map<string, string>(); // slug → max vintage
+  for (const f of forecastRows) {
+    const current = latestVintageByForecaster.get(f.forecasterSlug);
+    if (!current || f.vintage > current) {
+      latestVintageByForecaster.set(f.forecasterSlug, f.vintage);
+    }
+  }
+
   const latestForecastByForecasterPeriod = new Map<string, number>(); // "slug|period" → value
   for (const f of forecastRows) {
-    latestForecastByForecasterPeriod.set(`${f.forecasterSlug}|${f.targetPeriod}`, parseFloat(f.value));
+    if (f.vintage === latestVintageByForecaster.get(f.forecasterSlug)) {
+      latestForecastByForecasterPeriod.set(`${f.forecasterSlug}|${f.targetPeriod}`, parseFloat(f.value));
+    }
   }
 
   const chartData: DataPoint[] = allPeriods.map((period) => {
