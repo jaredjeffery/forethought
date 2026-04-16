@@ -1,8 +1,12 @@
 // Layout for all public showcase pages — header + footer, no auth required.
 
 import Link from "next/link";
+import { auth } from "@/auth";
+import { signOut } from "@/auth";
 
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
+export default async function PublicLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <header className="border-b border-gray-200">
@@ -17,6 +21,25 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <Link href="/forecasters" className="hover:text-gray-900 transition-colors">
               Forecasters
             </Link>
+            {session?.user ? (
+              <>
+                <Link href="/dashboard" className="hover:text-gray-900 transition-colors">
+                  Dashboard
+                </Link>
+                <form action={async () => { "use server"; await signOut({ redirectTo: "/" }); }}>
+                  <button type="submit" className="hover:text-gray-900 transition-colors">
+                    Sign out
+                  </button>
+                </form>
+              </>
+            ) : (
+              <Link
+                href="/signin"
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                Sign in
+              </Link>
+            )}
           </nav>
         </div>
       </header>
