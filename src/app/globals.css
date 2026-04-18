@@ -1,42 +1,76 @@
 @import "tailwindcss";
 
 :root {
-  --accent: #1845F5;
-  --accent-dark: #1235C4;
-  --accent-light: #EEF1FF;
-  --coral: #FF5C35;
-  --coral-light: #FFF1EE;
-  --ink: #0D0D18;
-  --muted: #64748B;
-  --tinted: #F8FAFF;
-  --border: #E2E8F0;
-  --border-dark: #CBD5E1;
-  --green: #059669;
-  --red: #DC2626;
+  /* Base surfaces */
+  --bg:          #F7F8FA;
+  --surface:     #FFFFFF;
+
+  /* Text */
+  --ink:         #111827;
+  --muted:       #6B7280;
+
+  /* Borders */
+  --border:      #E5E7EB;
+  --border-dark: #D1D5DB;
+
+  /* Brand accent */
+  --accent:      #1D4ED8;
+  --accent-dark: #1E3A8A;
+  --accent-light: #EFF6FF;
+
+  /* Semantic */
+  --green:       #059669;
+  --red:         #DC2626;
+  --orange:      #EA580C;
+
+  /* Shadows */
+  --shadow-card:  0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-raised: 0 8px 24px rgba(15, 23, 42, 0.06);
+
+  /* Radius */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   14px;
 }
 
 @theme inline {
   --font-display: var(--font-display);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --font-sans:    var(--font-sans);
+  --font-mono:    var(--font-mono);
 
-  --color-accent: var(--accent);
-  --color-accent-dark: var(--accent-dark);
+  --color-bg:           var(--bg);
+  --color-surface:      var(--surface);
+  --color-ink:          var(--ink);
+  --color-muted:        var(--muted);
+  --color-border:       var(--border);
+  --color-border-dark:  var(--border-dark);
+  --color-accent:       var(--accent);
+  --color-accent-dark:  var(--accent-dark);
   --color-accent-light: var(--accent-light);
-  --color-coral: var(--coral);
-  --color-coral-light: var(--coral-light);
-  --color-ink: var(--ink);
-  --color-muted: var(--muted);
-  --color-tinted: var(--tinted);
-  --color-border: var(--border);
-  --color-border-dark: var(--border-dark);
   --color-signal-green: var(--green);
-  --color-signal-red: var(--red);
+  --color-signal-red:   var(--red);
+  --color-signal-orange: var(--orange);
 }
 
 body {
-  background: #F4F7FF;
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 16px;
+  line-height: 1.6;
+}
+
+/* Reusable shadow and radius utilities — referenced by component classes */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.card-raised {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
 }
