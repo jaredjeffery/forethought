@@ -1,12 +1,13 @@
 // Landing page — public showcase entry point.
-// Server component: pulls featured variables and forecasters directly from DB.
-// NOTE: this is a placeholder layout. The production landing page will be a
-// news-style front page with articles, analysis, and events listings.
+// Two-column hero: headline/CTAs left, live forecaster leaderboard right.
+// NOTE: this is a data-led placeholder until the news/events layout ships.
 
 import { db } from "@/lib/db";
-import { variables, actuals, forecasters } from "@/lib/db/schema";
-import { eq, desc, inArray, and } from "drizzle-orm";
+import { variables, actuals, forecasters, forecasts, forecastScores } from "@/lib/db/schema";
+import { eq, desc, inArray, and, avg, count, isNotNull } from "drizzle-orm";
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
@@ -36,16 +37,35 @@ async function getFeaturedData() {
     .where(eq(forecasters.type, "INSTITUTION"))
     .orderBy(forecasters.name);
 
-  return { gdpVars, gdpActuals, institutions };
+  // Leaderboard: institutions ranked by avg absolute error (scored forecasts only)
+  const leaderboard = await db
+    .select({
+      id: forecasters.id,
+      name: forecasters.name,
+      slug: forecasters.slug,
+      forecastCount: count(forecasts.id),
+      avgError: avg(forecastScores.absoluteError),
+    })
+    .from(forecasters)
+    .innerJoin(forecasts, eq(forecasts.forecasterId, forecasters.id))
+    .innerJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
+    .where(and(
+      eq(forecasters.type, "INSTITUTION"),
+      isNotNull(forecastScores.absoluteError),
+    ))
+    .groupBy(forecasters.id, forecasters.name, forecasters.slug)
+    .orderBy(avg(forecastScores.absoluteError))
+    .limit(6);
+
+  return { gdpVars, gdpActuals, institutions, leaderboard };
 }
 
 const COUNTRY_LABELS: Record<string, string> = {
-  WLD: "World", USA: "United States", CHN: "China",
-  GBR: "United Kingdom", ZAF: "South Africa",
+  WLD: "World", USA: "US", CHN: "China", GBR: "UK", ZAF: "S. Africa",
 };
 
 export default async function LandingPage() {
-  const { gdpVars, gdpActuals, institutions } = await getFeaturedData();
+  const { gdpVars, gdpActuals, institutions, leaderboard } = await getFeaturedData();
 
   const latestActuals = new Map<string, { value: string; period: string }>();
   for (const a of gdpActuals) {
@@ -60,51 +80,102 @@ export default async function LandingPage() {
   return (
     <div className="space-y-20">
 
-      {/* ── Hero ─────────────────────────────────────────────────── */}
-      <section className="pt-6">
-        <h1
-          className="text-6xl sm:text-7xl text-ink leading-[1.05] tracking-tight max-w-3xl"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          Who calls it{" "}
-          <span className="text-accent">right?</span>
-        </h1>
-        <p className="mt-7 text-xl text-muted max-w-xl leading-relaxed">
-          Forethought tracks economic forecasts from institutions and independent
-          analysts, scores them against outcomes, and makes the record public.
-        </p>
-        <div className="mt-8 flex gap-3">
-          <Link
-            href="/variables"
-            className="inline-flex items-center px-6 py-3 text-base font-medium bg-accent text-white rounded hover:bg-accent-dark transition-colors duration-200"
+      {/* ── Two-column hero ───────────────────────────────────────── */}
+      <section className="pt-4 grid lg:grid-cols-[1fr_420px] gap-12 items-start">
+        {/* Left: headline + copy + CTAs */}
+        <div>
+          <h1
+            className="text-[64px] leading-[1.05] tracking-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
           >
-            Browse variables
-          </Link>
-          <Link
-            href="/forecasters"
-            className="inline-flex items-center px-6 py-3 text-base font-medium border-2 border-border text-ink rounded hover:border-accent hover:text-accent transition-colors duration-200"
-          >
-            View forecasters
-          </Link>
+            Who calls it{" "}
+            <span className="text-accent">right?</span>
+          </h1>
+          <p className="mt-6 text-xl text-muted leading-relaxed max-w-lg">
+            Forethought tracks economic forecasts from institutions and
+            independent analysts, scores them against outcomes, and publishes
+            the record — permanently.
+          </p>
+          <div className="mt-8 flex gap-3">
+            <Link
+              href="/variables"
+              className="inline-flex items-center px-6 py-3 text-base font-semibold bg-accent text-white rounded-[10px] hover:bg-accent-dark transition-colors duration-200"
+              style={{ boxShadow: "0 1px 3px rgba(29, 78, 216, 0.3)" }}
+            >
+              Browse variables
+            </Link>
+            <Link
+              href="/forecasters"
+              className="inline-flex items-center px-6 py-3 text-base font-semibold border-2 border-border text-ink rounded-[10px] hover:border-accent hover:text-accent transition-colors duration-200"
+            >
+              View forecasters
+            </Link>
+          </div>
         </div>
+
+        {/* Right: live leaderboard card */}
+        {leaderboard.length > 0 && (
+          <Card raised padding="none" className="overflow-hidden">
+            <div className="px-5 pt-5 pb-3 border-b border-border">
+              <p className="text-xs font-bold tracking-widest text-accent uppercase">
+                Accuracy Leaderboard
+              </p>
+              <p className="text-xs text-muted mt-0.5">Ranked by avg. absolute error — lower is better</p>
+            </div>
+            <div className="divide-y divide-border">
+              {leaderboard.map((f, i) => (
+                <Link
+                  key={f.id}
+                  href={`/forecasters/${f.slug}`}
+                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-bg transition-colors group"
+                >
+                  <span
+                    className="text-sm font-bold tabular-nums text-muted w-5 shrink-0"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-sm font-semibold text-ink group-hover:text-accent transition-colors truncate">
+                    {f.name}
+                  </span>
+                  {f.avgError != null && (
+                    <span
+                      className="text-sm tabular-nums text-muted shrink-0"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      {parseFloat(f.avgError).toFixed(2)} MAE
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-border">
+              <Link
+                href="/forecasters"
+                className="text-xs font-semibold text-accent hover:text-accent-dark transition-colors"
+              >
+                View all forecasters →
+              </Link>
+            </div>
+          </Card>
+        )}
       </section>
 
       {/* ── GDP snapshot ─────────────────────────────────────────── */}
       {gdpVars.length > 0 && (
         <section>
-          <p className="text-xs font-bold tracking-widest text-accent uppercase mb-5">
-            GDP Growth — Latest Actuals
-          </p>
+          <SectionLabel>GDP Growth — Latest Actuals</SectionLabel>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {gdpVars.map((v) => {
               const latest = latestActuals.get(v.id);
               const val = latest ? parseFloat(latest.value) : null;
-              const isPositive = val !== null && val >= 0;
+              const isPos = val !== null && val >= 0;
               return (
                 <Link
                   key={v.id}
                   href={`/variables/${v.id}`}
-                  className="group block p-4 border-2 border-border rounded-lg hover:border-accent transition-colors duration-200"
+                  className="group card px-5 py-4 hover:border-accent transition-colors duration-200"
+                  style={{ borderRadius: "var(--radius-md)" }}
                 >
                   <p className="text-xs font-bold tracking-wider text-muted uppercase">
                     {COUNTRY_LABELS[v.countryCode] ?? v.countryCode}
@@ -112,10 +183,12 @@ export default async function LandingPage() {
                   {latest && val !== null ? (
                     <>
                       <p
-                        className={`mt-2 text-2xl font-bold tabular-nums leading-none ${isPositive ? "text-signal-green" : "text-signal-red"}`}
+                        className={`mt-2 text-2xl font-bold tabular-nums leading-none ${
+                          isPos ? "text-signal-green" : "text-signal-red"
+                        }`}
                         style={{ fontFamily: "var(--font-mono)" }}
                       >
-                        {isPositive && val !== 0 ? "+" : ""}{val.toFixed(1)}%
+                        {isPos && val !== 0 ? "+" : ""}{val.toFixed(1)}%
                       </p>
                       <p className="mt-2 text-xs text-muted">{latest.period}</p>
                     </>
@@ -132,17 +205,17 @@ export default async function LandingPage() {
       {/* ── Tracked institutions ─────────────────────────────────── */}
       {institutions.length > 0 && (
         <section>
-          <p className="text-xs font-bold tracking-widest text-accent uppercase mb-5">
-            Tracked Institutions
-          </p>
-          <div className="border-t border-border">
+          <SectionLabel>Tracked Institutions</SectionLabel>
+          <Card padding="none">
             {institutions.map((f, i) => (
               <Link
                 key={f.id}
                 href={`/forecasters/${f.slug}`}
-                className="flex items-center justify-between py-4 border-b border-border group hover:bg-tinted -mx-2 px-2 rounded transition-colors duration-150"
+                className={`flex items-center justify-between px-6 py-4 hover:bg-bg transition-colors group ${
+                  i < institutions.length - 1 ? "border-b border-border" : ""
+                }`}
               >
-                <span className="text-base font-medium text-ink group-hover:text-accent transition-colors">
+                <span className="text-base font-semibold text-ink group-hover:text-accent transition-colors">
                   {f.name}
                 </span>
                 <span
@@ -153,16 +226,14 @@ export default async function LandingPage() {
                 </span>
               </Link>
             ))}
-          </div>
+          </Card>
         </section>
       )}
 
       {/* ── How it works ─────────────────────────────────────────── */}
       <section className="border-t border-border pt-14">
-        <p className="text-xs font-bold tracking-widest text-accent uppercase mb-10">
-          How It Works
-        </p>
-        <div className="grid sm:grid-cols-3 gap-10">
+        <SectionLabel>How It Works</SectionLabel>
+        <div className="grid sm:grid-cols-3 gap-8">
           {[
             {
               n: "01",
@@ -182,13 +253,13 @@ export default async function LandingPage() {
           ].map((item) => (
             <div key={item.n}>
               <p
-                className="text-4xl font-bold text-accent-light mb-4 leading-none"
+                className="text-4xl font-bold text-accent-light mb-4 leading-none select-none"
                 style={{ fontFamily: "var(--font-display)" }}
               >
                 {item.n}
               </p>
               <h3
-                className="text-lg font-semibold text-ink mb-3"
+                className="text-lg font-semibold text-ink mb-2"
                 style={{ fontFamily: "var(--font-display)" }}
               >
                 {item.title}
