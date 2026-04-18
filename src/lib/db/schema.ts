@@ -11,6 +11,7 @@ import {
   boolean,
   integer,
   timestamp,
+  date,
   unique,
   index,
   primaryKey,
@@ -131,6 +132,9 @@ export const forecasts = pgTable("forecasts", {
   upperCi: numeric("upper_ci", { precision: 20, scale: 6 }),
   // When this forecast was published or submitted
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
+  // When this forecast was *made* (for ingested institutional data: the publication date of
+  // the vintage, NOT the ingestion time). Used for horizon calculation and fair scoring.
+  forecastMadeAt: timestamp("forecast_made_at", { withTimezone: true }),
   // The publication vintage (WEO edition date, etc.) — used to track revisions
   vintage: text("vintage"),
   sourceUrl: text("source_url"),
@@ -163,11 +167,36 @@ export const actuals = pgTable("actuals", {
   publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
   // e.g. "IMF WEO October 2024" or "Statistics South Africa"
   source: text("source").notNull(),
+  // vintage_date: when this specific value was published by the source (DATE only)
+  vintageDate: date("vintage_date"),
+  // 1 = initial release, 2 = first revision, etc.
+  releaseNumber: integer("release_number").notNull().default(1),
+  // Convenience flag — true for the most recent release of each (variable, period, source)
+  isLatest: boolean("is_latest").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  // One actual per variable+period
-  unique("actuals_variable_period_unique").on(table.variableId, table.targetPeriod),
+  // Multiple releases per (variable, period, source) — scored against release_number = 1 (first release)
+  unique("actuals_variable_period_source_release_unique").on(
+    table.variableId, table.targetPeriod, table.source, table.releaseNumber
+  ),
 ]);
+
+// ---------------------------------------------------------------------------
+// Scoring methodologies
+// Every forecast_scores row references the version it was computed under.
+// If formulae change, old scores are preserved under the old version.
+// ---------------------------------------------------------------------------
+
+export const scoringMethodologies = pgTable("scoring_methodologies", {
+  version: text("version").primaryKey(),
+  effectiveFrom: date("effective_from").notNull(),
+  description: text("description").notNull(),
+  // Git SHA or file path to the canonical implementation
+  codeRef: text("code_ref").notNull(),
+  // e.g. "score against first-release actuals (release_number = 1)"
+  vintagePolicy: text("vintage_policy").notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+});
 
 // ---------------------------------------------------------------------------
 // Forecast scores
@@ -179,10 +208,18 @@ export const actuals = pgTable("actuals", {
 export const forecastScores = pgTable("forecast_scores", {
   id: uuid("id").primaryKey().defaultRandom(),
   forecastId: uuid("forecast_id").notNull().references(() => forecasts.id, { onDelete: "cascade" }).unique(),
+  // Which actual this was scored against (release_number = 1 = first release)
+  actualId: uuid("actual_id").references(() => actuals.id),
+  // Which scoring methodology version was used
+  methodologyVersion: text("methodology_version").references(() => scoringMethodologies.version),
+  // How many months ahead the forecast was made (derived from forecast_made_at vs target period)
+  horizonMonths: integer("horizon_months"),
   // |forecast - actual|
   absoluteError: numeric("absolute_error", { precision: 20, scale: 6 }),
   // (forecast - actual) / |actual| * 100
   percentageError: numeric("percentage_error", { precision: 20, scale: 6 }),
+  // forecast - actual (positive = forecaster was too high). Used for bias calculation.
+  signedError: numeric("signed_error", { precision: 20, scale: 6 }),
   // Whether the forecast was in the same direction as the actual (vs prior period or vs zero)
   directionalCorrect: boolean("directional_correct"),
   // Forecast error minus consensus error — negative means better than consensus
