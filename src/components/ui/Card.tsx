@@ -5,6 +5,7 @@ interface CardProps {
   className?: string;
   raised?: boolean;
   padding?: "sm" | "md" | "lg" | "none";
+  style?: React.CSSProperties;
 }
 
 const paddingMap = {
@@ -14,9 +15,10 @@ const paddingMap = {
   lg:   "p-8",
 };
 
-export function Card({ children, className = "", raised = false, padding = "md" }: CardProps) {
+export function Card({ children, className = "", raised = false, padding = "md", style }: CardProps) {
   return (
     <div
+      style={style}
       className={`${raised ? "card-raised" : "card"} ${paddingMap[padding]} ${className}`}
     >
       {children}

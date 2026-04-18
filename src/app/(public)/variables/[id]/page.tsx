@@ -1,11 +1,17 @@
 // /variables/[id] — variable detail page.
+// Chart is the centrepiece. Latest actual is integrated into the page header.
 
 import { db } from "@/lib/db";
-import { variables, forecasts, actuals, forecasters, forecastScores, consensusForecasts } from "@/lib/db/schema";
+import {
+  variables, forecasts, actuals, forecasters,
+  forecastScores, consensusForecasts,
+} from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
+import { Card } from "@/components/ui/Card";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
@@ -56,14 +62,6 @@ async function getVariableData(id: string) {
 
 interface PageProps {
   params: Promise<{ id: string }>;
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-bold tracking-widest text-accent uppercase mb-5">
-      {children}
-    </p>
-  );
 }
 
 export default async function VariableDetailPage({ params }: PageProps) {
@@ -125,18 +123,22 @@ export default async function VariableDetailPage({ params }: PageProps) {
   const pctUnit = variable.unit.includes("%");
 
   return (
-    <div className="space-y-14">
+    <div className="space-y-12">
+      {/* Breadcrumb */}
       <nav className="text-sm text-muted flex items-center gap-1.5">
         <Link href="/variables" className="hover:text-ink transition-colors">Variables</Link>
         <span>›</span>
         <span className="text-ink">{variable.name} — {variable.countryCode}</span>
       </nav>
 
+      {/* Page header */}
       <div className="flex items-start justify-between flex-wrap gap-6">
         <div>
-          <p className="text-xs font-bold tracking-widest text-accent uppercase mb-2">{variable.category}</p>
+          <p className="text-xs font-bold tracking-widest text-accent uppercase mb-2">
+            {variable.category}
+          </p>
           <h1
-            className="text-5xl text-ink tracking-tight"
+            className="text-5xl text-ink tracking-tight leading-tight"
             style={{ fontFamily: "var(--font-display)" }}
           >
             {variable.name}
@@ -152,10 +154,12 @@ export default async function VariableDetailPage({ params }: PageProps) {
         </div>
 
         {latestActual && (
-          <div className="border-2 border-border rounded-lg px-7 py-5 bg-tinted text-right">
+          <Card padding="none" raised className="px-8 py-5 text-right min-w-[160px]">
             <p className="text-xs font-bold tracking-wider text-muted uppercase">Latest actual</p>
             <p
-              className={`mt-2 text-4xl font-bold tabular-nums ${parseFloat(latestActual.value) >= 0 ? "text-signal-green" : "text-signal-red"}`}
+              className={`mt-2 text-4xl font-bold tabular-nums leading-none ${
+                parseFloat(latestActual.value) >= 0 ? "text-signal-green" : "text-signal-red"
+              }`}
               style={{ fontFamily: "var(--font-mono)" }}
             >
               {parseFloat(latestActual.value) > 0 ? "+" : ""}
@@ -163,28 +167,42 @@ export default async function VariableDetailPage({ params }: PageProps) {
               {pctUnit ? "%" : ""}
             </p>
             <p className="mt-1.5 text-sm text-muted">{latestActual.targetPeriod}</p>
-          </div>
+          </Card>
         )}
       </div>
 
+      {/* Chart — the centrepiece */}
       <section>
         <SectionLabel>Forecast History vs Actuals</SectionLabel>
-        <div className="border border-border rounded-lg p-5 bg-tinted">
-          <ForecastChart data={chartData} series={allSeries} unit={variable.unit} />
-        </div>
+        <Card
+          padding="none"
+          raised
+          className="pt-6 pb-4 px-4"
+          style={{ borderRadius: "var(--radius-lg)" } as React.CSSProperties}
+        >
+          <ForecastChart data={chartData} series={allSeries} unit={variable.unit} height={480} />
+        </Card>
       </section>
 
+      {/* Actuals strip — compact horizontal */}
       {actualRows.length > 0 && (
         <section>
           <SectionLabel>Actuals</SectionLabel>
           <div className="flex flex-wrap gap-2">
-            {actualRows.slice(-12).map((a) => {
+            {actualRows.slice(-14).map((a) => {
               const val = parseFloat(a.value);
               return (
-                <div key={a.id} className="px-4 py-3 border border-border rounded-lg bg-tinted text-center min-w-[72px]">
-                  <p className="text-[10px] font-bold tracking-wide text-muted uppercase">{a.targetPeriod}</p>
+                <div
+                  key={a.id}
+                  className="card px-4 py-2.5 text-center min-w-[68px]"
+                >
+                  <p className="text-[10px] font-bold tracking-wide text-muted uppercase">
+                    {a.targetPeriod}
+                  </p>
                   <p
-                    className={`mt-1.5 text-base font-bold tabular-nums ${val >= 0 ? "text-signal-green" : "text-signal-red"}`}
+                    className={`mt-1 text-sm font-bold tabular-nums ${
+                      val >= 0 ? "text-signal-green" : "text-signal-red"
+                    }`}
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
                     {val > 0 ? "+" : ""}{val.toFixed(1)}
@@ -196,57 +214,82 @@ export default async function VariableDetailPage({ params }: PageProps) {
         </section>
       )}
 
+      {/* Accuracy table */}
       {scoredForecasts.length > 0 && (
         <section>
           <SectionLabel>Forecast Accuracy</SectionLabel>
-          <div className="border border-border rounded-lg overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="border-b border-border bg-tinted">
-                <tr className="text-xs font-bold tracking-wider text-muted uppercase">
-                  <th className="text-left px-5 py-3">Forecaster</th>
-                  <th className="text-left px-5 py-3">Period</th>
-                  <th className="text-right px-5 py-3">Forecast</th>
-                  <th className="text-right px-5 py-3">Abs. error</th>
-                  <th className="text-right px-5 py-3">vs Consensus</th>
-                  <th className="text-center px-5 py-3">Direction</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {scoredForecasts.map((f) => (
-                  <tr key={f.id} className="hover:bg-tinted transition-colors">
-                    <td className="px-5 py-3.5">
-                      <Link href={`/forecasters/${f.forecasterSlug}`} className="text-base font-medium text-ink hover:text-accent transition-colors">
-                        {f.forecasterName}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5 text-sm font-medium tracking-wide text-muted">{f.targetPeriod}</td>
-                    <td className="px-5 py-3.5 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                      {parseFloat(f.value).toFixed(2)}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                      {f.absoluteError != null ? parseFloat(f.absoluteError).toFixed(2) : "—"}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                      {f.scoreVsConsensus != null ? (
-                        <span className={parseFloat(f.scoreVsConsensus) < 0 ? "text-signal-green font-medium" : "text-signal-red"}>
-                          {parseFloat(f.scoreVsConsensus) > 0 ? "+" : ""}
-                          {parseFloat(f.scoreVsConsensus).toFixed(2)}
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className="px-5 py-3.5 text-center text-base font-medium" style={{ fontFamily: "var(--font-mono)" }}>
-                      {f.directionalCorrect === null
-                        ? <span className="text-muted">—</span>
-                        : f.directionalCorrect
-                          ? <span className="text-signal-green">✓</span>
-                          : <span className="text-signal-red">✗</span>
-                      }
-                    </td>
+          <Card padding="none">
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="border-b border-border bg-bg">
+                  <tr className="text-xs font-bold tracking-wider text-muted uppercase">
+                    <th className="text-left px-5 py-3">Forecaster</th>
+                    <th className="text-left px-5 py-3">Period</th>
+                    <th className="text-right px-5 py-3">Forecast</th>
+                    <th className="text-right px-5 py-3">Abs. error</th>
+                    <th className="text-right px-5 py-3">vs Consensus</th>
+                    <th className="text-center px-5 py-3">Direction</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {scoredForecasts.map((f) => (
+                    <tr key={f.id} className="hover:bg-bg transition-colors">
+                      <td className="px-5 py-3.5">
+                        <Link
+                          href={`/forecasters/${f.forecasterSlug}`}
+                          className="text-base font-medium text-ink hover:text-accent transition-colors"
+                        >
+                          {f.forecasterName}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm font-medium tracking-wide text-muted">
+                        {f.targetPeriod}
+                      </td>
+                      <td
+                        className="px-5 py-3.5 text-right text-base tabular-nums"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {parseFloat(f.value).toFixed(2)}
+                      </td>
+                      <td
+                        className="px-5 py-3.5 text-right text-base tabular-nums"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {f.absoluteError != null ? parseFloat(f.absoluteError).toFixed(2) : "—"}
+                      </td>
+                      <td
+                        className="px-5 py-3.5 text-right text-base tabular-nums"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {f.scoreVsConsensus != null ? (
+                          <span
+                            className={
+                              parseFloat(f.scoreVsConsensus) < 0
+                                ? "text-signal-green font-medium"
+                                : "text-signal-red"
+                            }
+                          >
+                            {parseFloat(f.scoreVsConsensus) > 0 ? "+" : ""}
+                            {parseFloat(f.scoreVsConsensus).toFixed(2)}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td
+                        className="px-5 py-3.5 text-center text-base font-medium"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {f.directionalCorrect === null
+                          ? <span className="text-muted">—</span>
+                          : f.directionalCorrect
+                            ? <span className="text-signal-green">✓</span>
+                            : <span className="text-signal-red">✗</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </section>
       )}
 
