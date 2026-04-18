@@ -12,6 +12,13 @@
 //   score_vs_consensus  — (|forecast - actual|) - (|consensus - actual|).
 //                         Negative = forecaster beat the consensus. Null when no
 //                         consensus exists for the same variable/period.
+//   signed_error        — forecast - actual (positive = forecaster was too high).
+//                         Used for bias analysis.
+//
+// Scoring policy:
+//   - Always scores against the first-release actual (release_number = 1).
+//   - Stores actual_id, methodology_version ("v1.0"), and horizon_months on
+//     every score row for traceability and analysis.
 
 import { db } from "../db";
 import { forecasts, actuals, consensusForecasts, forecastScores } from "../db/schema";
@@ -63,6 +70,38 @@ export function computeScoreVsConsensus(
   return forecastError - consensusError;
 }
 
+/** forecast - actual (positive = forecaster was too high). Used for bias analysis. */
+export function computeSignedError(forecast: number, actual: number): number {
+  return forecast - actual;
+}
+
+/**
+ * How many months ahead the forecast was made relative to the end of the target period.
+ * Returns null when forecastMadeAt is not available.
+ */
+function computeHorizonMonths(forecastMadeAt: Date | null, targetPeriod: string): number | null {
+  if (!forecastMadeAt) return null;
+  // For annual periods ("2024"), target is approximately Dec 31 of that year
+  if (/^\d{4}$/.test(targetPeriod)) {
+    const targetDate = new Date(`${targetPeriod}-12-31`);
+    const months = (targetDate.getFullYear() - forecastMadeAt.getFullYear()) * 12
+      + (targetDate.getMonth() - forecastMadeAt.getMonth());
+    return Math.max(0, months);
+  }
+  // For quarterly periods ("2024Q1"), target is last month of quarter
+  const qMatch = targetPeriod.match(/^(\d{4})Q([1-4])$/);
+  if (qMatch) {
+    const year = parseInt(qMatch[1]);
+    const quarter = parseInt(qMatch[2]);
+    const endMonth = quarter * 3 - 1; // 0-indexed: Q1 ends in Feb (2), Q4 ends in Nov (11)
+    const targetDate = new Date(year, endMonth, 1);
+    const months = (targetDate.getFullYear() - forecastMadeAt.getFullYear()) * 12
+      + (targetDate.getMonth() - forecastMadeAt.getMonth());
+    return Math.max(0, months);
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Score a single forecast (by ID)
 // ---------------------------------------------------------------------------
@@ -77,19 +116,21 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
 
   if (!forecast) return false;
 
-  // Fetch the actual for this variable + period
+  // Fetch the first-release actual (release_number = 1) for this variable + period.
+  // Scoring policy: always use the initial release, not revisions.
   const [actual] = await db
     .select()
     .from(actuals)
     .where(
       and(
         eq(actuals.variableId, forecast.variableId),
-        eq(actuals.targetPeriod, forecast.targetPeriod)
+        eq(actuals.targetPeriod, forecast.targetPeriod),
+        eq(actuals.releaseNumber, 1)
       )
     )
     .limit(1);
 
-  if (!actual) return false; // can't score without an actual
+  if (!actual) return false; // no first-release actual yet; skip
 
   const fv = parseFloat(forecast.value);
   const av = parseFloat(actual.value);
@@ -107,7 +148,8 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
       .where(
         and(
           eq(actuals.variableId, forecast.variableId),
-          eq(actuals.targetPeriod, priorYear)
+          eq(actuals.targetPeriod, priorYear),
+          eq(actuals.releaseNumber, 1)
         )
       )
       .limit(1);
@@ -131,28 +173,38 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
   const percentageError = computePercentageError(fv, av);
   const directionalCorrect = computeDirectionalAccuracy(fv, av, priorActual);
   const scoreVsConsensus = computeScoreVsConsensus(fv, av, consensusValue);
+  const signedError = computeSignedError(fv, av);
+  const horizonMonths = computeHorizonMonths(forecast.forecastMadeAt ?? null, forecast.targetPeriod);
 
   // Upsert the score row (unique on forecast_id)
   await db
     .insert(forecastScores)
     .values({
       forecastId,
+      actualId: actual.id,
+      methodologyVersion: "v1.0",
       absoluteError: isNaN(absoluteError) ? null : String(absoluteError),
       percentageError: isNaN(percentageError) ? null : String(percentageError),
       directionalCorrect: directionalCorrect,
       scoreVsConsensus: scoreVsConsensus !== null && !isNaN(scoreVsConsensus)
         ? String(scoreVsConsensus)
         : null,
+      signedError: isNaN(signedError) ? null : String(signedError),
+      horizonMonths: horizonMonths,
     })
     .onConflictDoUpdate({
       target: forecastScores.forecastId,
       set: {
+        actualId: actual.id,
+        methodologyVersion: "v1.0",
         absoluteError: isNaN(absoluteError) ? null : String(absoluteError),
         percentageError: isNaN(percentageError) ? null : String(percentageError),
         directionalCorrect: directionalCorrect,
         scoreVsConsensus: scoreVsConsensus !== null && !isNaN(scoreVsConsensus)
           ? String(scoreVsConsensus)
           : null,
+        signedError: isNaN(signedError) ? null : String(signedError),
+        horizonMonths: horizonMonths,
         computedAt: new Date(),
       },
     });
@@ -165,7 +217,7 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 export async function scoreAllPending(): Promise<{ scored: number; skipped: number }> {
-  // Find forecasts with a matching actual but no score row
+  // Find forecasts with a matching first-release actual but no score row
   const pending = await db
     .select({ id: forecasts.id })
     .from(forecasts)
@@ -173,7 +225,8 @@ export async function scoreAllPending(): Promise<{ scored: number; skipped: numb
       actuals,
       and(
         eq(actuals.variableId, forecasts.variableId),
-        eq(actuals.targetPeriod, forecasts.targetPeriod)
+        eq(actuals.targetPeriod, forecasts.targetPeriod),
+        eq(actuals.releaseNumber, 1)
       )
     )
     .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
@@ -205,7 +258,8 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
       actuals,
       and(
         eq(actuals.variableId, forecasts.variableId),
-        eq(actuals.targetPeriod, forecasts.targetPeriod)
+        eq(actuals.targetPeriod, forecasts.targetPeriod),
+        eq(actuals.releaseNumber, 1)
       )
     );
 
