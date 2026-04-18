@@ -1,5 +1,4 @@
 // /variables — browseable list of all tracked economic variables.
-// Server component with country and category filter support via searchParams.
 
 import { db } from "@/lib/db";
 import { variables, actuals } from "@/lib/db/schema";
@@ -62,7 +61,7 @@ async function getVariables(country?: string, category?: string) {
 }
 
 const selectClass =
-  "text-sm border border-warm-border rounded px-3 py-1.5 bg-cream text-ink focus:border-amber focus:outline-none";
+  "text-sm border border-border rounded px-3 py-2 bg-white text-ink focus:border-accent focus:outline-none";
 
 interface PageProps {
   searchParams: Promise<{ country?: string; category?: string }>;
@@ -76,15 +75,14 @@ export default async function VariablesPage({ searchParams }: PageProps) {
     <div className="space-y-10">
       <div>
         <h1
-          className="text-4xl text-ink tracking-tight"
+          className="text-5xl text-ink tracking-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
           Variables
         </h1>
-        <div className="mt-2 h-px w-10 bg-amber" />
+        <div className="mt-2 h-[3px] w-12 bg-accent" />
       </div>
 
-      {/* Filters */}
       <form className="flex flex-wrap items-center gap-3">
         <select name="country" defaultValue={country ?? ""} className={selectClass}>
           <option value="">All countries</option>
@@ -100,55 +98,54 @@ export default async function VariablesPage({ searchParams }: PageProps) {
         </select>
         <button
           type="submit"
-          className="text-sm px-4 py-1.5 bg-ink text-cream rounded hover:bg-amber transition-colors duration-200"
+          className="text-sm px-4 py-2 bg-accent text-white rounded hover:bg-accent-dark transition-colors duration-200"
         >
           Filter
         </button>
         {(country || category) && (
           <Link
             href="/variables"
-            className="text-sm px-4 py-1.5 border border-warm-border rounded hover:border-amber-light transition-colors"
+            className="text-sm px-4 py-2 border border-border rounded hover:border-accent transition-colors"
           >
             Clear
           </Link>
         )}
-        <span className="ml-auto text-xs text-muted">{rows.length} variables</span>
+        <span className="ml-auto text-sm text-muted">{rows.length} variables</span>
       </form>
 
-      {/* Table */}
       {rows.length === 0 ? (
-        <p className="text-sm text-muted py-8">No variables match the selected filters.</p>
+        <p className="text-base text-muted py-8">No variables match the selected filters.</p>
       ) : (
-        <div className="border border-warm-border rounded overflow-hidden">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-warm-border">
-              <tr className="text-[11px] font-semibold tracking-wider text-muted uppercase">
-                <th className="text-left px-4 py-3">Variable</th>
-                <th className="text-left px-4 py-3">Country</th>
-                <th className="text-left px-4 py-3">Unit</th>
-                <th className="text-right px-4 py-3">Latest actual</th>
+        <div className="border border-border rounded-lg overflow-hidden">
+          <table className="min-w-full">
+            <thead className="border-b border-border bg-tinted">
+              <tr className="text-xs font-bold tracking-wider text-muted uppercase">
+                <th className="text-left px-5 py-3">Variable</th>
+                <th className="text-left px-5 py-3">Country</th>
+                <th className="text-left px-5 py-3">Unit</th>
+                <th className="text-right px-5 py-3">Latest actual</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-warm-border">
+            <tbody className="divide-y divide-border">
               {rows.map((v) => {
                 const latest = latestActualsMap.get(v.id);
                 const val = latest ? parseFloat(latest.value) : null;
                 return (
-                  <tr key={v.id} className="hover:bg-cream-tinted transition-colors">
-                    <td className="px-4 py-3">
-                      <Link href={`/variables/${v.id}`} className="font-medium text-ink hover:text-amber transition-colors">
+                  <tr key={v.id} className="hover:bg-tinted transition-colors">
+                    <td className="px-5 py-3.5">
+                      <Link href={`/variables/${v.id}`} className="text-base font-medium text-ink hover:text-accent transition-colors">
                         {v.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-medium tracking-wide text-muted">{v.countryCode}</span>
+                    <td className="px-5 py-3.5">
+                      <span className="text-sm font-medium tracking-wide text-muted">{v.countryCode}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted">{v.unit}</td>
-                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
+                    <td className="px-5 py-3.5 text-sm text-muted">{v.unit}</td>
+                    <td className="px-5 py-3.5 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                       {latest && val !== null ? (
                         <span className={val >= 0 ? "text-signal-green" : "text-signal-red"}>
                           {val > 0 ? "+" : ""}{val.toFixed(2)}
-                          <span className="text-muted ml-1.5 text-xs">{latest.targetPeriod}</span>
+                          <span className="text-muted ml-2 text-xs">{latest.targetPeriod}</span>
                         </span>
                       ) : (
                         <span className="text-muted">—</span>

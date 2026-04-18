@@ -8,8 +8,8 @@ export default async function PublicLayout({ children }: { children: React.React
   const session = await auth();
 
   return (
-    <div className="min-h-screen bg-cream text-ink">
-      <header className="border-b border-warm-border bg-cream">
+    <div className="min-h-screen bg-white text-ink">
+      <header className="border-b border-border bg-white sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex flex-col leading-none group">
             <span
@@ -18,9 +18,7 @@ export default async function PublicLayout({ children }: { children: React.React
             >
               Forethought
             </span>
-            <span
-              className="block h-[2px] w-full mt-0.5 bg-amber transition-all duration-300 group-hover:w-3/4"
-            />
+            <span className="block h-[2px] w-full mt-0.5 bg-accent transition-all duration-300 group-hover:w-3/4" />
           </Link>
 
           <nav className="flex items-center gap-7 text-sm text-muted">
@@ -44,7 +42,7 @@ export default async function PublicLayout({ children }: { children: React.React
             ) : (
               <Link
                 href="/signin"
-                className="px-3.5 py-1.5 text-xs font-medium tracking-wide bg-ink text-cream rounded hover:bg-amber transition-colors duration-200"
+                className="px-4 py-1.5 text-sm font-medium bg-accent text-white rounded hover:bg-accent-dark transition-colors duration-200"
               >
                 Sign in
               </Link>
@@ -57,12 +55,12 @@ export default async function PublicLayout({ children }: { children: React.React
         {children}
       </main>
 
-      <footer className="border-t border-warm-border mt-24">
+      <footer className="border-t border-border mt-24">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <p className="text-xs text-muted" style={{ fontFamily: "var(--font-display)" }}>
+          <p className="text-sm text-muted" style={{ fontFamily: "var(--font-display)" }}>
             Forethought
           </p>
-          <p className="text-xs text-muted">
+          <p className="text-sm text-muted">
             Transparent performance tracking for economic forecasters.
           </p>
         </div>

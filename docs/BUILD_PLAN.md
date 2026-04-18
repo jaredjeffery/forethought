@@ -305,12 +305,13 @@ CREATE TABLE consensus_forecasts (
 
 Build scrapers and manual-import tools for publicly available forecasts:
 
-- IMF World Economic Outlook (April and October releases): GDP growth, inflation, current account, unemployment for all covered countries. Published as downloadable datasets.
-- World Bank Global Economic Prospects (January and June): GDP growth, commodity price forecasts.
-- OECD Economic Outlook (May and November): GDP, inflation, trade, fiscal balances for OECD and key emerging markets.
-- Major central bank forecasts: Fed (Summary of Economic Projections, quarterly), ECB (staff projections, quarterly), Bank of England (Monetary Policy Report, quarterly), SARB (Monetary Policy Review — relevant to your South African knowledge and client base).
+- IMF World Economic Outlook (April and October releases): GDP growth, inflation, current account, unemployment for all covered countries. Published as downloadable datasets. **Status: ingested (2021–Oct 2025, 11 vintages).**
+- OECD Economic Outlook (May and November): GDP, inflation, trade, fiscal balances for OECD and key emerging markets. **Priority: next institutional source after IMF — machine-readable via OECD.Stat API, broad country coverage, vintage logic directly analogous to WEO.**
+- World Bank Global Economic Prospects (January and June): GDP growth, commodity price forecasts. World Bank API already in use for actuals, so forecast ingestion is straightforward. **Priority: third institutional source.**
+- European Commission Economic Forecast (spring and autumn): EU/euro area coverage. Available via AMECO database download.
+- Major central bank forecasts: Fed (Summary of Economic Projections, quarterly), ECB (staff projections, quarterly), Bank of England (Monetary Policy Report, quarterly), SARB (Monetary Policy Review — relevant to your South African knowledge and client base). Narrower country scope; higher parsing effort (PDFs). Defer until OECD and WB are live.
 - National treasuries and finance departments where publicly available (e.g. SA National Treasury MTBPS and Budget Review).
-- Commodity price benchmarks: EIA oil price forecasts, World Bank commodity price forecasts.
+- Commodity price benchmarks: EIA oil price forecasts, World Bank commodity price forecasts. **Note: the IMF WEO Oct-2025 xlsx already contains a Commodity Prices sheet — this is a quick win once the macro variables are stable.**
 
 For each source, you need:
 - A parser that extracts the forecast values and maps them to your variable schema
@@ -384,6 +385,24 @@ Compute and display consensus forecasts (simple average) across all ingested ins
 Initially, this can be free or offered at a nominal price. The purpose in Phase 1 is to demonstrate the data product concept and attract users who find it useful. Premium (weighted) consensus comes in Phase 2 once you have enough contributors and scoring data to justify the weighting.
 
 **Reasoning:** Revenue from consensus data is a medium-term goal, but offering it early — even free — establishes Forethought as a data provider and creates habits among users. It also gives you early feedback on what format and delivery mechanism institutional buyers want (API, Excel download, dashboard, etc.).
+
+**1.6 Forecaster intelligence and profile depth**
+
+Forecaster profile pages should go beyond a single accuracy number. The goal is to give both external visitors ("should I trust this forecaster?") and the forecasters themselves ("where am I strong and where should I improve?") a genuinely useful analytical view.
+
+Each forecaster profile should eventually show:
+
+- **Accuracy by variable** — MAE broken down by indicator (GDP, CPI, unemployment, etc.). Some forecasters are strong on inflation but poor on fiscal variables.
+- **Accuracy by country/region** — which geographies does this forecaster call well? Which are consistently hard for them?
+- **Accuracy by horizon** — 1-year-ahead vs 3-year-ahead vs 5-year-ahead. Most forecasters degrade at longer horizons, but the rate varies.
+- **Bias analysis** — mean signed error (not just absolute). Is this forecaster systematically optimistic about growth? Systematically pessimistic about inflation? This is one of the most actionable insights for both forecasters and buyers.
+- **Performance vs consensus** — beat rate: what % of forecasts were closer to the outturn than the simple consensus? A forecaster who consistently beats consensus is adding genuine value.
+- **Forecast revision quality** — when a forecaster revises their view, do they move toward or away from the eventual outturn? Good updaters should be rewarded.
+- **Best and worst calls** — specific forecast instances with the largest positive and negative errors. Gives the profile a narrative quality and makes the accuracy data concrete.
+
+**Vintage progression (IMF-specific initially):** Because we have WEO data going back to 2007, we can show how IMF forecasts for a specific outcome evolved over successive vintages — e.g. how did the IMF's forecast for 2009 global GDP evolve from the Apr 2007 vintage through to the outturn? This cross-vintage analysis is documented in `data/weo/FORECAST_EVALUATION.md`. It is IMF-specific now but the methodology generalises once other forecasters have similar vintage depth. Build this as a standalone view before integrating into the profile framework.
+
+**Reasoning:** The forecaster profile is Forethought's core product promise — transparent, granular performance data. Building it out properly in Phase 1, using institutional forecasters as the demonstration layer, proves the concept before analysts sign up. It also produces the kind of editorial content ("the IMF has an optimism bias at 3-year horizons") that drives organic traffic and press coverage.
 
 ---
 
@@ -519,7 +538,7 @@ This is a business development phase, not a technical one, but the platform need
 
 Based on user demand and analyst supply, expand into:
 - Financial market variables (equity indices, bond yields, exchange rates)
-- Commodity-specific forecasts (beyond oil: metals, agriculture)
+- Commodity-specific forecasts (beyond oil: metals, agriculture). **Note: IMF WEO xlsx already contains a Commodity Prices sheet — quick win once core macro is stable.**
 - Political events and elections
 - Country-specific deep dives (e.g. comprehensive South African macro coverage, leveraging your network)
 

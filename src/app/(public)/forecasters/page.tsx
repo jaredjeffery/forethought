@@ -28,7 +28,7 @@ async function getForecasters() {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold tracking-widest text-amber uppercase mb-5">
+    <p className="text-xs font-bold tracking-widest text-accent uppercase mb-5">
       {children}
     </p>
   );
@@ -43,19 +43,18 @@ export default async function ForecastersPage() {
     <div className="space-y-14">
       <div>
         <h1
-          className="text-4xl text-ink tracking-tight"
+          className="text-5xl text-ink tracking-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
           Forecasters
         </h1>
-        <div className="mt-2 h-px w-10 bg-amber" />
+        <div className="mt-2 h-[3px] w-12 bg-accent" />
       </div>
 
-      {/* Institutions */}
       <section>
         <SectionLabel>Institutions</SectionLabel>
-        <div className="border-t border-warm-border">
-          <div className="grid grid-cols-12 py-2 text-[11px] font-semibold tracking-wider text-muted uppercase border-b border-warm-border">
+        <div className="border-t border-border">
+          <div className="grid grid-cols-12 py-2.5 text-xs font-bold tracking-wider text-muted uppercase border-b border-border">
             <div className="col-span-6">Name</div>
             <div className="col-span-3 text-right">Forecasts</div>
             <div className="col-span-3 text-right">Avg error</div>
@@ -63,26 +62,20 @@ export default async function ForecastersPage() {
           {institutions.map((f) => (
             <div
               key={f.id}
-              className="grid grid-cols-12 py-3.5 border-b border-warm-border hover:bg-cream-tinted -mx-2 px-2 rounded transition-colors duration-150 group"
+              className="grid grid-cols-12 py-4 border-b border-border hover:bg-tinted -mx-2 px-2 rounded transition-colors duration-150 group"
             >
               <div className="col-span-6">
                 <Link
                   href={`/forecasters/${f.slug}`}
-                  className="text-sm font-medium text-ink group-hover:text-amber transition-colors"
+                  className="text-base font-medium text-ink group-hover:text-accent transition-colors"
                 >
                   {f.name}
                 </Link>
               </div>
-              <div
-                className="col-span-3 text-right text-sm text-muted tabular-nums"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
+              <div className="col-span-3 text-right text-base text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                 {Number(f.forecastCount) > 0 ? f.forecastCount : "—"}
               </div>
-              <div
-                className="col-span-3 text-right text-sm tabular-nums"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
+              <div className="col-span-3 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                 {f.avgAbsoluteError != null
                   ? parseFloat(f.avgAbsoluteError).toFixed(2)
                   : <span className="text-muted">—</span>
@@ -93,12 +86,11 @@ export default async function ForecastersPage() {
         </div>
       </section>
 
-      {/* Analysts */}
       {analysts.length > 0 && (
         <section>
           <SectionLabel>Independent Analysts</SectionLabel>
-          <div className="border-t border-warm-border">
-            <div className="grid grid-cols-12 py-2 text-[11px] font-semibold tracking-wider text-muted uppercase border-b border-warm-border">
+          <div className="border-t border-border">
+            <div className="grid grid-cols-12 py-2.5 text-xs font-bold tracking-wider text-muted uppercase border-b border-border">
               <div className="col-span-6">Name</div>
               <div className="col-span-3 text-right">Forecasts</div>
               <div className="col-span-3 text-right">Avg error</div>
@@ -106,26 +98,20 @@ export default async function ForecastersPage() {
             {analysts.map((f) => (
               <div
                 key={f.id}
-                className="grid grid-cols-12 py-3.5 border-b border-warm-border hover:bg-cream-tinted -mx-2 px-2 rounded transition-colors duration-150 group"
+                className="grid grid-cols-12 py-4 border-b border-border hover:bg-tinted -mx-2 px-2 rounded transition-colors duration-150 group"
               >
                 <div className="col-span-6">
                   <Link
                     href={`/forecasters/${f.slug}`}
-                    className="text-sm font-medium text-ink group-hover:text-amber transition-colors"
+                    className="text-base font-medium text-ink group-hover:text-accent transition-colors"
                   >
                     {f.name}
                   </Link>
                 </div>
-                <div
-                  className="col-span-3 text-right text-sm text-muted tabular-nums"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
+                <div className="col-span-3 text-right text-base text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                   {f.forecastCount}
                 </div>
-                <div
-                  className="col-span-3 text-right text-sm tabular-nums"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
+                <div className="col-span-3 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                   {f.avgAbsoluteError != null
                     ? parseFloat(f.avgAbsoluteError).toFixed(2)
                     : <span className="text-muted">—</span>
