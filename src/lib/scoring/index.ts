@@ -94,19 +94,25 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
   const fv = parseFloat(forecast.value);
   const av = parseFloat(actual.value);
 
-  // Fetch the prior year's actual for directional accuracy
-  const priorYear = String(parseInt(forecast.targetPeriod, 10) - 1);
-  const [priorActualRow] = await db
-    .select({ value: actuals.value })
-    .from(actuals)
-    .where(
-      and(
-        eq(actuals.variableId, forecast.variableId),
-        eq(actuals.targetPeriod, priorYear)
+  // Directional accuracy only applies to annual periods (plain 4-digit year).
+  // Quarterly ("2024Q1") and monthly ("2024-03") formats are not supported here —
+  // parseInt would silently truncate them to a year, producing a wrong prior period.
+  const isAnnual = /^\d{4}$/.test(forecast.targetPeriod);
+  let priorActual: number | null = null;
+  if (isAnnual) {
+    const priorYear = String(parseInt(forecast.targetPeriod, 10) - 1);
+    const [priorActualRow] = await db
+      .select({ value: actuals.value })
+      .from(actuals)
+      .where(
+        and(
+          eq(actuals.variableId, forecast.variableId),
+          eq(actuals.targetPeriod, priorYear)
+        )
       )
-    )
-    .limit(1);
-  const priorActual = priorActualRow ? parseFloat(priorActualRow.value) : null;
+      .limit(1);
+    priorActual = priorActualRow ? parseFloat(priorActualRow.value) : null;
+  }
 
   // Fetch consensus for this variable + period
   const [consensus] = await db
@@ -176,6 +182,8 @@ export async function scoreAllPending(): Promise<{ scored: number; skipped: numb
   let scored = 0;
   let skipped = 0;
 
+  // N+1: each scoreForecast call makes 3-4 DB queries. Acceptable for Phase 1
+  // volumes; replace with a batched upsert before this runs over ~10k forecasts.
   for (const { id } of pending) {
     const ok = await scoreForecast(id);
     if (ok) scored++;

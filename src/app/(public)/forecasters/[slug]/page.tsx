@@ -1,102 +1,11 @@
 // /forecasters/[slug] — institution or analyst profile page.
 // Shows accuracy by indicator, country, forecast horizon, and individual variable.
 
-import { db } from "@/lib/db";
-import { forecasters, forecasts, variables, forecastScores } from "@/lib/db/schema";
-import { eq, avg, count, sql, and, isNotNull } from "drizzle-orm";
+import { getForecasterBySlug, getForecasterProfileData } from "@/lib/forecaster-queries";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
 export const revalidate = 3600;
-
-async function getForecasterData(slug: string) {
-  const [forecaster] = await db
-    .select()
-    .from(forecasters)
-    .where(eq(forecasters.slug, slug))
-    .limit(1);
-
-  if (!forecaster) return null;
-
-  // Overall stats: total forecasts, scored count, bias, beat-consensus rate
-  const [overallStats] = await db
-    .select({
-      scoredCount: count(forecastScores.id),
-      avgBias: avg(forecastScores.percentageError),
-      beatConsensusCount: sql<string>`COUNT(CASE WHEN ${forecastScores.scoreVsConsensus} < 0 THEN 1 END)`,
-      vsConsensusTotal: sql<string>`COUNT(CASE WHEN ${forecastScores.scoreVsConsensus} IS NOT NULL THEN 1 END)`,
-    })
-    .from(forecasts)
-    .innerJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(eq(forecasts.forecasterId, forecaster.id));
-
-  // Accuracy by indicator (variable name, aggregated across all countries)
-  const accuracyByIndicator = await db
-    .select({
-      indicatorName: variables.name,
-      scoredCount: count(forecastScores.id),
-      avgAbsoluteError: avg(forecastScores.absoluteError),
-      avgBias: avg(forecastScores.percentageError),
-    })
-    .from(forecasts)
-    .innerJoin(variables, eq(forecasts.variableId, variables.id))
-    .innerJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(eq(forecasts.forecasterId, forecaster.id))
-    .groupBy(variables.name)
-    .orderBy(avg(forecastScores.absoluteError));
-
-  // Accuracy by country (aggregated across all indicators)
-  const accuracyByCountry = await db
-    .select({
-      countryCode: variables.countryCode,
-      scoredCount: count(forecastScores.id),
-      avgAbsoluteError: avg(forecastScores.absoluteError),
-      avgBias: avg(forecastScores.percentageError),
-    })
-    .from(forecasts)
-    .innerJoin(variables, eq(forecasts.variableId, variables.id))
-    .innerJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(eq(forecasts.forecasterId, forecaster.id))
-    .groupBy(variables.countryCode)
-    .orderBy(avg(forecastScores.absoluteError));
-
-  // Accuracy by forecast horizon (target_year − vintage_year)
-  const horizonExpr = sql<number>`CAST(${forecasts.targetPeriod} AS INTEGER) - CAST(SPLIT_PART(${forecasts.vintage}, '-', 1) AS INTEGER)`;
-  const accuracyByHorizon = await db
-    .select({
-      horizon: horizonExpr,
-      scoredCount: count(forecastScores.id),
-      avgAbsoluteError: avg(forecastScores.absoluteError),
-      avgBias: avg(forecastScores.percentageError),
-    })
-    .from(forecasts)
-    .innerJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(and(
-      eq(forecasts.forecasterId, forecaster.id),
-      isNotNull(forecasts.vintage),
-    ))
-    .groupBy(horizonExpr)
-    .orderBy(horizonExpr);
-
-  // Full breakdown: accuracy by individual variable (existing behaviour)
-  const accuracyByVariable = await db
-    .select({
-      variableId: variables.id,
-      variableName: variables.name,
-      countryCode: variables.countryCode,
-      forecastCount: count(forecasts.id),
-      avgAbsoluteError: avg(forecastScores.absoluteError),
-      avgScoreVsConsensus: avg(forecastScores.scoreVsConsensus),
-    })
-    .from(forecasts)
-    .innerJoin(variables, eq(forecasts.variableId, variables.id))
-    .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(eq(forecasts.forecasterId, forecaster.id))
-    .groupBy(variables.id, variables.name, variables.countryCode)
-    .orderBy(variables.countryCode, variables.name);
-
-  return { forecaster, overallStats, accuracyByIndicator, accuracyByCountry, accuracyByHorizon, accuracyByVariable };
-}
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -127,11 +36,11 @@ interface PageProps {
 
 export default async function ForecasterProfilePage({ params }: PageProps) {
   const { slug } = await params;
-  const data = await getForecasterData(slug);
+  const forecaster = await getForecasterBySlug(slug);
+  if (!forecaster) notFound();
 
-  if (!data) notFound();
-
-  const { forecaster, overallStats, accuracyByIndicator, accuracyByCountry, accuracyByHorizon, accuracyByVariable } = data;
+  const { overallStats, accuracyByIndicator, accuracyByCountry, accuracyByHorizon, accuracyByVariable } =
+    await getForecasterProfileData(forecaster.id);
 
   const totalForecasts = accuracyByVariable.reduce((s, r) => s + Number(r.forecastCount), 0);
   const scoredCount = Number(overallStats.scoredCount);

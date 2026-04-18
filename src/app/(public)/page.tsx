@@ -3,23 +3,24 @@
 
 import { db } from "@/lib/db";
 import { variables, actuals, forecasters } from "@/lib/db/schema";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 import Link from "next/link";
 
 export const revalidate = 3600; // revalidate every hour
 
 async function getFeaturedData() {
-  // Feature a small set of high-interest variables: GDP growth for key economies
-  const featuredVars = await db
+  // GDP Growth Rate for key economies — filtered at DB level, not in JS
+  const gdpVars = await db
     .select()
     .from(variables)
     .where(
-      inArray(variables.countryCode, ["WLD", "USA", "CHN", "GBR", "ZAF"])
+      and(
+        eq(variables.name, "GDP Growth Rate"),
+        inArray(variables.countryCode, ["WLD", "USA", "CHN", "GBR", "ZAF"])
+      )
     )
     .orderBy(variables.countryCode, variables.name);
 
-  // Latest actuals for GDP Growth Rate
-  const gdpVars = featuredVars.filter((v) => v.name === "GDP Growth Rate");
   const gdpActuals = gdpVars.length > 0
     ? await db
         .select()
@@ -35,7 +36,7 @@ async function getFeaturedData() {
     .where(eq(forecasters.type, "INSTITUTION"))
     .orderBy(forecasters.name);
 
-  return { featuredVars, gdpVars, gdpActuals, institutions };
+  return { gdpVars, gdpActuals, institutions };
 }
 
 export default async function LandingPage() {

@@ -22,6 +22,7 @@ import type { AdapterAccountType } from "next-auth/adapters";
 // ---------------------------------------------------------------------------
 
 export const userRoleEnum = pgEnum("user_role", [
+  "VIEWER",
   "ANALYST",
   "BUYER",
   "ADMIN",
@@ -54,7 +55,7 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
-  role: userRoleEnum("role").notNull().default("ANALYST"),
+  role: userRoleEnum("role").notNull().default("VIEWER"),
   // Auth.js required fields
   emailVerified: timestamp("email_verified", { mode: "date", withTimezone: true }),
   image: text("image"),

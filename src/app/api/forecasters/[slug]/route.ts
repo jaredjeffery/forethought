@@ -4,14 +4,21 @@
 import { db } from "@/lib/db";
 import { forecasters, forecasts, variables, forecastScores } from "@/lib/db/schema";
 import { eq, avg, count } from "drizzle-orm";
+import { z } from "zod";
 import { ok, error, handleError } from "@/lib/api-helpers";
+
+const slugSchema = z.object({
+  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, "Invalid slug format"),
+});
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = await params;
+    const parsed = slugSchema.safeParse(await params);
+    if (!parsed.success) return error("Invalid slug", 400);
+    const { slug } = parsed.data;
 
     const [forecaster] = await db
       .select()
