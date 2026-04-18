@@ -15,6 +15,13 @@
       "when": 1776322660406,
       "tag": "0001_blue_layla_miller",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776539475434,
+      "tag": "0002_whole_forgotten_one",
+      "breakpoints": true
     }
   ]
 }
