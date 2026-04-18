@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { variables, actuals } from "@/lib/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
 
 export const revalidate = 3600;
 
@@ -51,7 +52,6 @@ async function getVariables(country?: string, category?: string) {
       .from(actuals)
       .where(inArray(actuals.variableId, variableIds))
       .orderBy(actuals.targetPeriod);
-
     for (const a of latestActuals) {
       latestActualsMap.set(a.variableId, { value: a.value, targetPeriod: a.targetPeriod });
     }
@@ -60,8 +60,8 @@ async function getVariables(country?: string, category?: string) {
   return { rows, latestActualsMap };
 }
 
-const selectClass =
-  "text-sm border border-border rounded px-3 py-2 bg-white text-ink focus:border-accent focus:outline-none";
+const inputClass =
+  "text-sm border border-border rounded-[10px] px-3.5 py-2 bg-surface text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors";
 
 interface PageProps {
   searchParams: Promise<{ country?: string; category?: string }>;
@@ -84,13 +84,13 @@ export default async function VariablesPage({ searchParams }: PageProps) {
       </div>
 
       <form className="flex flex-wrap items-center gap-3">
-        <select name="country" defaultValue={country ?? ""} className={selectClass}>
+        <select name="country" defaultValue={country ?? ""} className={inputClass}>
           <option value="">All countries</option>
           {COUNTRY_OPTIONS.map((c) => (
             <option key={c.code} value={c.code}>{c.label}</option>
           ))}
         </select>
-        <select name="category" defaultValue={category ?? ""} className={selectClass}>
+        <select name="category" defaultValue={category ?? ""} className={inputClass}>
           <option value="">All categories</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -98,14 +98,15 @@ export default async function VariablesPage({ searchParams }: PageProps) {
         </select>
         <button
           type="submit"
-          className="text-sm px-4 py-2 bg-accent text-white rounded hover:bg-accent-dark transition-colors duration-200"
+          className="text-sm font-semibold px-4 py-2 bg-accent text-white rounded-[10px] hover:bg-accent-dark transition-colors duration-200"
+          style={{ boxShadow: "0 1px 3px rgba(29, 78, 216, 0.25)" }}
         >
           Filter
         </button>
         {(country || category) && (
           <Link
             href="/variables"
-            className="text-sm px-4 py-2 border border-border rounded hover:border-accent transition-colors"
+            className="text-sm font-medium px-4 py-2 border border-border rounded-[10px] hover:border-accent transition-colors"
           >
             Clear
           </Link>
@@ -116,47 +117,55 @@ export default async function VariablesPage({ searchParams }: PageProps) {
       {rows.length === 0 ? (
         <p className="text-base text-muted py-8">No variables match the selected filters.</p>
       ) : (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <table className="min-w-full">
-            <thead className="border-b border-border bg-tinted">
-              <tr className="text-xs font-bold tracking-wider text-muted uppercase">
-                <th className="text-left px-5 py-3">Variable</th>
-                <th className="text-left px-5 py-3">Country</th>
-                <th className="text-left px-5 py-3">Unit</th>
-                <th className="text-right px-5 py-3">Latest actual</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((v) => {
-                const latest = latestActualsMap.get(v.id);
-                const val = latest ? parseFloat(latest.value) : null;
-                return (
-                  <tr key={v.id} className="hover:bg-tinted transition-colors">
-                    <td className="px-5 py-3.5">
-                      <Link href={`/variables/${v.id}`} className="text-base font-medium text-ink hover:text-accent transition-colors">
-                        {v.name}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className="text-sm font-medium tracking-wide text-muted">{v.countryCode}</span>
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-muted">{v.unit}</td>
-                    <td className="px-5 py-3.5 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                      {latest && val !== null ? (
-                        <span className={val >= 0 ? "text-signal-green" : "text-signal-red"}>
-                          {val > 0 ? "+" : ""}{val.toFixed(2)}
-                          <span className="text-muted ml-2 text-xs">{latest.targetPeriod}</span>
-                        </span>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Card padding="none">
+          <div className="overflow-hidden">
+            <table className="min-w-full">
+              <thead className="border-b border-border bg-bg">
+                <tr className="text-xs font-bold tracking-wider text-muted uppercase">
+                  <th className="text-left px-6 py-3">Variable</th>
+                  <th className="text-left px-6 py-3">Country</th>
+                  <th className="text-left px-6 py-3">Unit</th>
+                  <th className="text-right px-6 py-3">Latest actual</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((v) => {
+                  const latest = latestActualsMap.get(v.id);
+                  const val = latest ? parseFloat(latest.value) : null;
+                  return (
+                    <tr key={v.id} className="hover:bg-bg transition-colors">
+                      <td className="px-6 py-4">
+                        <Link
+                          href={`/variables/${v.id}`}
+                          className="text-base font-semibold text-ink hover:text-accent transition-colors"
+                        >
+                          {v.name}
+                        </Link>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-semibold tracking-wide text-muted">{v.countryCode}</span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted">{v.unit}</td>
+                      <td
+                        className="px-6 py-4 text-right tabular-nums"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {latest && val !== null ? (
+                          <span className={val >= 0 ? "text-signal-green font-medium" : "text-signal-red font-medium"}>
+                            {val > 0 ? "+" : ""}{val.toFixed(2)}
+                            <span className="text-muted font-normal ml-2 text-xs">{latest.targetPeriod}</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   );

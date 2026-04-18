@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { forecasters, forecasts, forecastScores } from "@/lib/db/schema";
 import { eq, avg, count } from "drizzle-orm";
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
+import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
@@ -26,21 +28,59 @@ async function getForecasters() {
   return rows;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-bold tracking-widest text-accent uppercase mb-5">
-      {children}
-    </p>
-  );
-}
-
 export default async function ForecastersPage() {
   const rows = await getForecasters();
   const institutions = rows.filter((r) => r.type === "INSTITUTION");
   const analysts = rows.filter((r) => r.type === "ANALYST");
 
+  function ForecasterTable({ items }: { items: typeof rows }) {
+    return (
+      <Card padding="none">
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="border-b border-border bg-bg">
+              <tr className="text-xs font-bold tracking-wider text-muted uppercase">
+                <th className="text-left px-6 py-3 w-[60%]">Name</th>
+                <th className="text-right px-6 py-3">Forecasts</th>
+                <th className="text-right px-6 py-3">Avg error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((f) => (
+                <tr key={f.id} className="hover:bg-bg transition-colors group">
+                  <td className="px-6 py-4">
+                    <Link
+                      href={`/forecasters/${f.slug}`}
+                      className="text-base font-semibold text-ink group-hover:text-accent transition-colors"
+                    >
+                      {f.name}
+                    </Link>
+                  </td>
+                  <td
+                    className="px-6 py-4 text-right text-base text-muted tabular-nums"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {Number(f.forecastCount) > 0 ? f.forecastCount : "—"}
+                  </td>
+                  <td
+                    className="px-6 py-4 text-right text-base tabular-nums"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {f.avgAbsoluteError != null
+                      ? parseFloat(f.avgAbsoluteError).toFixed(2)
+                      : <span className="text-muted">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    );
+  }
+
   return (
-    <div className="space-y-14">
+    <div className="space-y-12">
       <div>
         <h1
           className="text-5xl text-ink tracking-tight"
@@ -53,73 +93,13 @@ export default async function ForecastersPage() {
 
       <section>
         <SectionLabel>Institutions</SectionLabel>
-        <div className="border-t border-border">
-          <div className="grid grid-cols-12 py-2.5 text-xs font-bold tracking-wider text-muted uppercase border-b border-border">
-            <div className="col-span-6">Name</div>
-            <div className="col-span-3 text-right">Forecasts</div>
-            <div className="col-span-3 text-right">Avg error</div>
-          </div>
-          {institutions.map((f) => (
-            <div
-              key={f.id}
-              className="grid grid-cols-12 py-4 border-b border-border hover:bg-tinted -mx-2 px-2 rounded transition-colors duration-150 group"
-            >
-              <div className="col-span-6">
-                <Link
-                  href={`/forecasters/${f.slug}`}
-                  className="text-base font-medium text-ink group-hover:text-accent transition-colors"
-                >
-                  {f.name}
-                </Link>
-              </div>
-              <div className="col-span-3 text-right text-base text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                {Number(f.forecastCount) > 0 ? f.forecastCount : "—"}
-              </div>
-              <div className="col-span-3 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                {f.avgAbsoluteError != null
-                  ? parseFloat(f.avgAbsoluteError).toFixed(2)
-                  : <span className="text-muted">—</span>
-                }
-              </div>
-            </div>
-          ))}
-        </div>
+        <ForecasterTable items={institutions} />
       </section>
 
       {analysts.length > 0 && (
         <section>
           <SectionLabel>Independent Analysts</SectionLabel>
-          <div className="border-t border-border">
-            <div className="grid grid-cols-12 py-2.5 text-xs font-bold tracking-wider text-muted uppercase border-b border-border">
-              <div className="col-span-6">Name</div>
-              <div className="col-span-3 text-right">Forecasts</div>
-              <div className="col-span-3 text-right">Avg error</div>
-            </div>
-            {analysts.map((f) => (
-              <div
-                key={f.id}
-                className="grid grid-cols-12 py-4 border-b border-border hover:bg-tinted -mx-2 px-2 rounded transition-colors duration-150 group"
-              >
-                <div className="col-span-6">
-                  <Link
-                    href={`/forecasters/${f.slug}`}
-                    className="text-base font-medium text-ink group-hover:text-accent transition-colors"
-                  >
-                    {f.name}
-                  </Link>
-                </div>
-                <div className="col-span-3 text-right text-base text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                  {f.forecastCount}
-                </div>
-                <div className="col-span-3 text-right text-base tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
-                  {f.avgAbsoluteError != null
-                    ? parseFloat(f.avgAbsoluteError).toFixed(2)
-                    : <span className="text-muted">—</span>
-                  }
-                </div>
-              </div>
-            ))}
-          </div>
+          <ForecasterTable items={analysts} />
         </section>
       )}
     </div>
