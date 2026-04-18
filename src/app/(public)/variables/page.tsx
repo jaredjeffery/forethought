@@ -10,7 +10,6 @@ export const revalidate = 3600;
 
 const CATEGORIES = ["MACRO", "COMMODITY", "FINANCIAL", "POLITICAL"] as const;
 
-// Country options shown in the filter dropdown (aggregates first, then individuals)
 const COUNTRY_OPTIONS = [
   { code: "WLD", label: "World" },
   { code: "ADV", label: "Advanced Economies" },
@@ -45,7 +44,6 @@ async function getVariables(country?: string, category?: string) {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(variables.countryCode, variables.name);
 
-  // Fetch latest actual for each variable
   const latestActualsMap = new Map<string, { value: string; targetPeriod: string }>();
   if (rows.length > 0) {
     const variableIds = rows.map((v) => v.id);
@@ -55,7 +53,6 @@ async function getVariables(country?: string, category?: string) {
       .where(inArray(actuals.variableId, variableIds))
       .orderBy(actuals.targetPeriod);
 
-    // Keep only the latest per variable (last in ordered results wins)
     for (const a of latestActuals) {
       latestActualsMap.set(a.variableId, { value: a.value, targetPeriod: a.targetPeriod });
     }
@@ -63,6 +60,9 @@ async function getVariables(country?: string, category?: string) {
 
   return { rows, latestActualsMap };
 }
+
+const selectClass =
+  "text-sm border border-warm-border rounded px-3 py-1.5 bg-cream text-ink focus:border-amber focus:outline-none";
 
 interface PageProps {
   searchParams: Promise<{ country?: string; category?: string }>;
@@ -73,29 +73,26 @@ export default async function VariablesPage({ searchParams }: PageProps) {
   const { rows, latestActualsMap } = await getVariables(country, category);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Variables</h1>
-        <span className="text-sm text-gray-500">{rows.length} variables</span>
+    <div className="space-y-10">
+      <div>
+        <h1
+          className="text-4xl text-ink tracking-tight"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          Variables
+        </h1>
+        <div className="mt-2 h-px w-10 bg-amber" />
       </div>
 
       {/* Filters */}
-      <form className="flex flex-wrap gap-3">
-        <select
-          name="country"
-          defaultValue={country ?? ""}
-          className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white"
-        >
+      <form className="flex flex-wrap items-center gap-3">
+        <select name="country" defaultValue={country ?? ""} className={selectClass}>
           <option value="">All countries</option>
           {COUNTRY_OPTIONS.map((c) => (
             <option key={c.code} value={c.code}>{c.label}</option>
           ))}
         </select>
-        <select
-          name="category"
-          defaultValue={category ?? ""}
-          className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white"
-        >
+        <select name="category" defaultValue={category ?? ""} className={selectClass}>
           <option value="">All categories</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -103,51 +100,59 @@ export default async function VariablesPage({ searchParams }: PageProps) {
         </select>
         <button
           type="submit"
-          className="text-sm px-3 py-1.5 bg-gray-900 text-white rounded-md hover:bg-gray-700 transition-colors"
+          className="text-sm px-4 py-1.5 bg-ink text-cream rounded hover:bg-amber transition-colors duration-200"
         >
           Filter
         </button>
         {(country || category) && (
           <Link
             href="/variables"
-            className="text-sm px-3 py-1.5 border border-gray-300 rounded-md hover:border-gray-400 transition-colors"
+            className="text-sm px-4 py-1.5 border border-warm-border rounded hover:border-amber-light transition-colors"
           >
             Clear
           </Link>
         )}
+        <span className="ml-auto text-xs text-muted">{rows.length} variables</span>
       </form>
 
-      {/* Variable table */}
+      {/* Table */}
       {rows.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8">No variables match the selected filters.</p>
+        <p className="text-sm text-muted py-8">No variables match the selected filters.</p>
       ) : (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="border border-warm-border rounded overflow-hidden">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Variable</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Country</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Unit</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Latest actual</th>
+            <thead className="border-b border-warm-border">
+              <tr className="text-[11px] font-semibold tracking-wider text-muted uppercase">
+                <th className="text-left px-4 py-3">Variable</th>
+                <th className="text-left px-4 py-3">Country</th>
+                <th className="text-left px-4 py-3">Unit</th>
+                <th className="text-right px-4 py-3">Latest actual</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-warm-border">
               {rows.map((v) => {
                 const latest = latestActualsMap.get(v.id);
+                const val = latest ? parseFloat(latest.value) : null;
                 return (
-                  <tr key={v.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={v.id} className="hover:bg-cream-tinted transition-colors">
                     <td className="px-4 py-3">
-                      <Link href={`/variables/${v.id}`} className="font-medium hover:underline">
+                      <Link href={`/variables/${v.id}`} className="font-medium text-ink hover:text-amber transition-colors">
                         {v.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{v.countryCode}</td>
-                    <td className="px-4 py-3 text-gray-500">{v.unit}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-gray-800">
-                      {latest
-                        ? `${parseFloat(latest.value).toFixed(2)} (${latest.targetPeriod})`
-                        : <span className="text-gray-400">—</span>
-                      }
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-medium tracking-wide text-muted">{v.countryCode}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">{v.unit}</td>
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
+                      {latest && val !== null ? (
+                        <span className={val >= 0 ? "text-signal-green" : "text-signal-red"}>
+                          {val > 0 ? "+" : ""}{val.toFixed(2)}
+                          <span className="text-muted ml-1.5 text-xs">{latest.targetPeriod}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
                     </td>
                   </tr>
                 );

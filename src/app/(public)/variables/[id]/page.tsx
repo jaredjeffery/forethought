@@ -1,6 +1,5 @@
 // /variables/[id] — variable detail page.
 // Shows forecast history, actuals, consensus, and accuracy scores.
-// Server component: data fetched at render time. Chart is a client component.
 
 import { db } from "@/lib/db";
 import { variables, forecasts, actuals, forecasters, forecastScores, consensusForecasts } from "@/lib/db/schema";
@@ -20,7 +19,6 @@ async function getVariableData(id: string) {
 
   if (!variable) return null;
 
-  // Forecasts with forecaster info and scores
   const forecastRows = await db
     .select({
       id: forecasts.id,
@@ -42,14 +40,12 @@ async function getVariableData(id: string) {
     .where(eq(forecasts.variableId, id))
     .orderBy(forecasts.targetPeriod, desc(forecasts.submittedAt));
 
-  // Actuals
   const actualRows = await db
     .select()
     .from(actuals)
     .where(eq(actuals.variableId, id))
     .orderBy(actuals.targetPeriod);
 
-  // Consensus
   const consensusRows = await db
     .select()
     .from(consensusForecasts)
@@ -63,6 +59,14 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold tracking-widest text-amber uppercase mb-5">
+      {children}
+    </p>
+  );
+}
+
 export default async function VariableDetailPage({ params }: PageProps) {
   const { id } = await params;
   const data = await getVariableData(id);
@@ -71,7 +75,6 @@ export default async function VariableDetailPage({ params }: PageProps) {
 
   const { variable, forecastRows, actualRows, consensusRows } = data;
 
-  // Build chart data: one row per period, columns for each forecaster + actual
   const allPeriods = [
     ...new Set([
       ...actualRows.map((a) => a.targetPeriod),
@@ -79,8 +82,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
     ]),
   ].sort();
 
-  // Unique forecasters
-  const forecasterSet = new Map<string, string>(); // slug → name
+  const forecasterSet = new Map<string, string>();
   for (const f of forecastRows) {
     forecasterSet.set(f.forecasterSlug, f.forecasterName);
   }
@@ -88,14 +90,10 @@ export default async function VariableDetailPage({ params }: PageProps) {
     slug, name, color: "",
   }));
 
-  // Build period → actual lookup
   const actualByPeriod = new Map(actualRows.map((a) => [a.targetPeriod, parseFloat(a.value)]));
   const consensusByPeriod = new Map(consensusRows.map((c) => [c.targetPeriod, parseFloat(c.simpleMean)]));
 
-  // Find the latest vintage published by each forecaster for this variable.
-  // The chart shows only that vintage — "what does the IMF currently say about 2027?"
-  // not a palimpsest of every past round.
-  const latestVintageByForecaster = new Map<string, string>(); // slug → max vintage
+  const latestVintageByForecaster = new Map<string, string>();
   for (const f of forecastRows) {
     const current = latestVintageByForecaster.get(f.forecasterSlug);
     if (f.vintage && (!current || f.vintage > current)) {
@@ -103,7 +101,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
     }
   }
 
-  const latestForecastByForecasterPeriod = new Map<string, number>(); // "slug|period" → value
+  const latestForecastByForecasterPeriod = new Map<string, number>();
   for (const f of forecastRows) {
     if (f.vintage === latestVintageByForecaster.get(f.forecasterSlug)) {
       latestForecastByForecasterPeriod.set(`${f.forecasterSlug}|${f.targetPeriod}`, parseFloat(f.value));
@@ -120,59 +118,93 @@ export default async function VariableDetailPage({ params }: PageProps) {
     return row;
   });
 
-  // All series including consensus
   const allSeries = [
     ...(consensusRows.length > 0 ? [{ slug: "consensus", name: "Consensus", color: "" }] : []),
     ...seriesList,
   ];
 
-  // Scored forecasts for the accuracy table (only those with a score)
   const scoredForecasts = forecastRows.filter((f) => f.absoluteError !== null);
+  const latestActual = actualRows.at(-1);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-14">
       {/* Breadcrumb */}
-      <nav className="text-sm text-gray-500">
-        <Link href="/variables" className="hover:text-gray-700">Variables</Link>
-        <span className="mx-2">›</span>
-        <span className="text-gray-900">{variable.name} — {variable.countryCode}</span>
+      <nav className="text-xs text-muted flex items-center gap-1.5">
+        <Link href="/variables" className="hover:text-ink transition-colors">Variables</Link>
+        <span>›</span>
+        <span className="text-ink">{variable.name} — {variable.countryCode}</span>
       </nav>
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {variable.name}
-          <span className="ml-2 text-lg font-normal text-gray-500">{variable.countryCode}</span>
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          {variable.unit} · {variable.frequency}
-          {variable.description && ` · ${variable.description}`}
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-6">
+        <div>
+          <p className="text-xs font-semibold tracking-widest text-amber uppercase mb-2">{variable.category}</p>
+          <h1
+            className="text-4xl text-ink tracking-tight"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            {variable.name}
+            <span
+              className="ml-3 text-2xl text-muted"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {variable.countryCode}
+            </span>
+          </h1>
+          <div className="mt-2 h-px w-10 bg-amber" />
+          <p className="mt-3 text-sm text-muted">
+            {variable.unit} · {variable.frequency.toLowerCase()}
+            {variable.description && ` · ${variable.description}`}
+          </p>
+        </div>
+
+        {/* Latest actual callout */}
+        {latestActual && (
+          <div className="border border-warm-border rounded px-6 py-4 bg-cream-tinted text-right">
+            <p className="text-[11px] font-semibold tracking-wider text-muted uppercase">Latest actual</p>
+            <p
+              className={`mt-1 text-3xl font-semibold tabular-nums ${parseFloat(latestActual.value) >= 0 ? "text-signal-green" : "text-signal-red"}`}
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              {parseFloat(latestActual.value) > 0 ? "+" : ""}
+              {parseFloat(latestActual.value).toFixed(2)}
+              {variable.unit.includes("%") ? "%" : ""}
+            </p>
+            <p className="mt-1 text-xs text-muted">{latestActual.targetPeriod}</p>
+          </div>
+        )}
       </div>
 
       {/* Chart */}
       <section>
-        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-          Forecast history vs actuals
-        </h2>
-        <ForecastChart data={chartData} series={allSeries} unit={variable.unit} />
+        <SectionLabel>Forecast History vs Actuals</SectionLabel>
+        <div className="border border-warm-border rounded p-4 bg-cream-tinted">
+          <ForecastChart data={chartData} series={allSeries} unit={variable.unit} />
+        </div>
       </section>
 
-      {/* Actuals table */}
+      {/* Actuals timeline */}
       {actualRows.length > 0 && (
         <section>
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-            Actuals
-          </h2>
-          <div className="flex flex-wrap gap-3">
-            {actualRows.slice(-10).map((a) => (
-              <div key={a.id} className="px-3 py-2 border border-gray-200 rounded-lg text-center">
-                <p className="text-xs text-gray-500">{a.targetPeriod}</p>
-                <p className="text-lg font-semibold tabular-nums">
-                  {parseFloat(a.value).toFixed(2)}
-                </p>
-              </div>
-            ))}
+          <SectionLabel>Actuals</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {actualRows.slice(-12).map((a) => {
+              const val = parseFloat(a.value);
+              return (
+                <div
+                  key={a.id}
+                  className="px-4 py-3 border border-warm-border rounded bg-cream-tinted text-center min-w-[72px]"
+                >
+                  <p className="text-[10px] font-medium tracking-wide text-muted uppercase">{a.targetPeriod}</p>
+                  <p
+                    className={`mt-1 text-base font-semibold tabular-nums ${val >= 0 ? "text-signal-green" : "text-signal-red"}`}
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {val > 0 ? "+" : ""}{val.toFixed(1)}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -180,47 +212,49 @@ export default async function VariableDetailPage({ params }: PageProps) {
       {/* Accuracy table */}
       {scoredForecasts.length > 0 && (
         <section>
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-            Forecast accuracy
-          </h2>
-          <div className="border border-gray-200 rounded-lg overflow-x-auto">
+          <SectionLabel>Forecast Accuracy</SectionLabel>
+          <div className="border border-warm-border rounded overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Forecaster</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Period</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Forecast</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Abs. error</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">vs consensus</th>
-                  <th className="text-center px-4 py-3 font-medium text-gray-600">Direction</th>
+              <thead className="border-b border-warm-border">
+                <tr className="text-[11px] font-semibold tracking-wider text-muted uppercase">
+                  <th className="text-left px-4 py-3">Forecaster</th>
+                  <th className="text-left px-4 py-3">Period</th>
+                  <th className="text-right px-4 py-3">Forecast</th>
+                  <th className="text-right px-4 py-3">Abs. error</th>
+                  <th className="text-right px-4 py-3">vs Consensus</th>
+                  <th className="text-center px-4 py-3">Direction</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-warm-border">
                 {scoredForecasts.map((f) => (
-                  <tr key={f.id} className="hover:bg-gray-50">
+                  <tr key={f.id} className="hover:bg-cream-tinted transition-colors">
                     <td className="px-4 py-3">
-                      <Link href={`/forecasters/${f.forecasterSlug}`} className="hover:underline">
+                      <Link href={`/forecasters/${f.forecasterSlug}`} className="font-medium text-ink hover:text-amber transition-colors">
                         {f.forecasterName}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{f.targetPeriod}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
+                    <td className="px-4 py-3 text-muted text-xs font-medium tracking-wide">{f.targetPeriod}</td>
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                       {parseFloat(f.value).toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                       {f.absoluteError != null ? parseFloat(f.absoluteError).toFixed(2) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
                       {f.scoreVsConsensus != null ? (
-                        <span className={parseFloat(f.scoreVsConsensus) < 0 ? "text-green-600" : "text-red-600"}>
+                        <span className={parseFloat(f.scoreVsConsensus) < 0 ? "text-signal-green" : "text-signal-red"}>
                           {parseFloat(f.scoreVsConsensus) > 0 ? "+" : ""}
                           {parseFloat(f.scoreVsConsensus).toFixed(2)}
                         </span>
                       ) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      {f.directionalCorrect === null ? "—"
-                        : f.directionalCorrect ? "✓" : "✗"}
+                    <td className="px-4 py-3 text-center text-xs font-medium" style={{ fontFamily: "var(--font-mono)" }}>
+                      {f.directionalCorrect === null
+                        ? <span className="text-muted">—</span>
+                        : f.directionalCorrect
+                          ? <span className="text-signal-green">✓</span>
+                          : <span className="text-signal-red">✗</span>
+                      }
                     </td>
                   </tr>
                 ))}
@@ -231,7 +265,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
       )}
 
       {forecastRows.length === 0 && actualRows.length === 0 && (
-        <p className="text-sm text-gray-500 py-8">
+        <p className="text-sm text-muted py-8">
           No data available yet for this variable. Check back after the next data ingestion.
         </p>
       )}

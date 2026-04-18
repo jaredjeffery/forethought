@@ -15,17 +15,41 @@ function fmtError(v: string | null | undefined) {
 }
 
 function fmtBias(v: string | null | undefined) {
-  if (v == null) return { label: "—", cls: "text-gray-400" };
+  if (v == null) return { label: "—", cls: "text-muted" };
   const n = parseFloat(v);
   const label = (n > 0 ? "+" : "") + n.toFixed(1) + "%";
-  // positive bias = forecast too high (optimistic); negative = too low (pessimistic)
-  const cls = Math.abs(n) < 0.5 ? "text-gray-700" : n > 0 ? "text-amber-600" : "text-blue-600";
+  const cls = Math.abs(n) < 0.5 ? "text-ink" : n > 0 ? "text-amber" : "text-signal-green";
   return { label, cls };
 }
 
 function horizonLabel(h: number) {
   if (h === 0) return "Current year";
   return `${h}-year ahead`;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold tracking-widest text-amber uppercase mb-5">
+      {children}
+    </p>
+  );
+}
+
+function DataTable({ head, children }: { head: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="border border-warm-border rounded overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="border-b border-warm-border">
+          <tr className="text-[11px] font-semibold tracking-wider text-muted uppercase">
+            {head}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-border">
+          {children}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 // ─── page ──────────────────────────────────────────────────────────────────
@@ -50,205 +74,217 @@ export default async function ForecasterProfilePage({ params }: PageProps) {
   const beatRate = vsTotal > 0 ? Math.round((beatCount / vsTotal) * 100) : null;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-14">
       {/* Breadcrumb */}
-      <nav className="text-sm text-gray-500">
-        <Link href="/forecasters" className="hover:text-gray-700">Forecasters</Link>
-        <span className="mx-2">›</span>
-        <span className="text-gray-900">{forecaster.name}</span>
+      <nav className="text-xs text-muted flex items-center gap-1.5">
+        <Link href="/forecasters" className="hover:text-ink transition-colors">Forecasters</Link>
+        <span>›</span>
+        <span className="text-ink">{forecaster.name}</span>
       </nav>
 
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{forecaster.name}</h1>
-          <p className="mt-1 text-sm text-gray-500 capitalize">{forecaster.type.toLowerCase()}</p>
-        </div>
-        <div className="flex gap-8 flex-wrap">
-          <div className="text-right">
-            <p className="text-xs text-gray-500">Forecasts</p>
-            <p className="text-2xl font-semibold tabular-nums">{totalForecasts || "—"}</p>
+      <div>
+        <p className="text-xs font-semibold tracking-widest text-amber uppercase mb-3">
+          {forecaster.type.toLowerCase()}
+        </p>
+        <h1
+          className="text-4xl text-ink tracking-tight"
+          style={{ fontFamily: "var(--font-display)" }}
+        >
+          {forecaster.name}
+        </h1>
+        <div className="mt-2 h-px w-10 bg-amber" />
+
+        {/* Stat cards */}
+        {(totalForecasts > 0 || scoredCount > 0) && (
+          <div className="mt-8 flex flex-wrap gap-px border border-warm-border rounded overflow-hidden">
+            {totalForecasts > 0 && (
+              <div className="flex-1 min-w-[120px] px-6 py-4 bg-cream-tinted">
+                <p className="text-[11px] font-semibold tracking-wider text-muted uppercase">Forecasts</p>
+                <p
+                  className="mt-1 text-3xl font-semibold text-ink tabular-nums"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {totalForecasts}
+                </p>
+              </div>
+            )}
+            {scoredCount > 0 && (
+              <div className="flex-1 min-w-[120px] px-6 py-4 bg-cream-tinted">
+                <p className="text-[11px] font-semibold tracking-wider text-muted uppercase">Scored</p>
+                <p
+                  className="mt-1 text-3xl font-semibold text-ink tabular-nums"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {scoredCount}
+                </p>
+              </div>
+            )}
+            {overallStats.avgBias != null && (
+              <div className="flex-1 min-w-[120px] px-6 py-4 bg-cream-tinted">
+                <p className="text-[11px] font-semibold tracking-wider text-muted uppercase">Avg bias</p>
+                <p
+                  className={`mt-1 text-3xl font-semibold tabular-nums ${bias.cls}`}
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {bias.label}
+                </p>
+              </div>
+            )}
+            {beatRate !== null && (
+              <div className="flex-1 min-w-[120px] px-6 py-4 bg-cream-tinted">
+                <p className="text-[11px] font-semibold tracking-wider text-muted uppercase">Beat consensus</p>
+                <p
+                  className={`mt-1 text-3xl font-semibold tabular-nums ${beatRate >= 50 ? "text-signal-green" : "text-signal-red"}`}
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {beatRate}%
+                </p>
+              </div>
+            )}
           </div>
-          {scoredCount > 0 && (
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Scored</p>
-              <p className="text-2xl font-semibold tabular-nums">{scoredCount}</p>
-            </div>
-          )}
-          {overallStats.avgBias != null && (
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Avg bias</p>
-              <p className={`text-2xl font-semibold tabular-nums ${bias.cls}`}>{bias.label}</p>
-            </div>
-          )}
-          {beatRate !== null && (
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Beat consensus</p>
-              <p className="text-2xl font-semibold tabular-nums">{beatRate}%</p>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {accuracyByIndicator.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8">
+        <p className="text-sm text-muted py-8">
           No scored forecasts yet. Check back after the next data ingestion.
         </p>
       ) : (
         <>
           {/* By indicator */}
           <section>
-            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-              Accuracy by indicator
-            </h2>
-            <p className="text-xs text-gray-400 mb-3">
-              Aggregated across all countries. Bias: positive = systematically too high; negative = too low.
+            <SectionLabel>Accuracy by Indicator</SectionLabel>
+            <p className="text-xs text-muted mb-4">
+              Aggregated across all countries. Positive bias = systematically too high; negative = too low.
             </p>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Indicator</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Scored</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">MAE</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Bias</th>
+            <DataTable
+              head={
+                <>
+                  <th className="text-left px-4 py-3">Indicator</th>
+                  <th className="text-right px-4 py-3">Scored</th>
+                  <th className="text-right px-4 py-3">MAE</th>
+                  <th className="text-right px-4 py-3">Bias</th>
+                </>
+              }
+            >
+              {accuracyByIndicator.map((row) => {
+                const b = fmtBias(row.avgBias);
+                return (
+                  <tr key={row.indicatorName} className="hover:bg-cream-tinted transition-colors">
+                    <td className="px-4 py-3 font-medium text-ink">{row.indicatorName}</td>
+                    <td className="px-4 py-3 text-right text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>{row.scoredCount}</td>
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>{fmtError(row.avgAbsoluteError)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums ${b.cls}`} style={{ fontFamily: "var(--font-mono)" }}>{b.label}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {accuracyByIndicator.map((row) => {
-                    const b = fmtBias(row.avgBias);
-                    return (
-                      <tr key={row.indicatorName} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium">{row.indicatorName}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-gray-600">{row.scoredCount}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{fmtError(row.avgAbsoluteError)}</td>
-                        <td className={`px-4 py-3 text-right tabular-nums ${b.cls}`}>{b.label}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                );
+              })}
+            </DataTable>
           </section>
 
           {/* By country */}
           <section>
-            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-              Accuracy by country
-            </h2>
-            <p className="text-xs text-gray-400 mb-3">
-              Aggregated across all indicators. Sorted by MAE (most accurate first).
+            <SectionLabel>Accuracy by Country</SectionLabel>
+            <p className="text-xs text-muted mb-4">
+              Aggregated across all indicators. Sorted by MAE — most accurate first.
             </p>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Country</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Scored</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">MAE</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Bias</th>
+            <DataTable
+              head={
+                <>
+                  <th className="text-left px-4 py-3">Country</th>
+                  <th className="text-right px-4 py-3">Scored</th>
+                  <th className="text-right px-4 py-3">MAE</th>
+                  <th className="text-right px-4 py-3">Bias</th>
+                </>
+              }
+            >
+              {accuracyByCountry.map((row) => {
+                const b = fmtBias(row.avgBias);
+                return (
+                  <tr key={row.countryCode} className="hover:bg-cream-tinted transition-colors">
+                    <td className="px-4 py-3 font-medium text-ink">{row.countryCode}</td>
+                    <td className="px-4 py-3 text-right text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>{row.scoredCount}</td>
+                    <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>{fmtError(row.avgAbsoluteError)}</td>
+                    <td className={`px-4 py-3 text-right tabular-nums ${b.cls}`} style={{ fontFamily: "var(--font-mono)" }}>{b.label}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {accuracyByCountry.map((row) => {
-                    const b = fmtBias(row.avgBias);
-                    return (
-                      <tr key={row.countryCode} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium">{row.countryCode}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-gray-600">{row.scoredCount}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{fmtError(row.avgAbsoluteError)}</td>
-                        <td className={`px-4 py-3 text-right tabular-nums ${b.cls}`}>{b.label}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                );
+              })}
+            </DataTable>
           </section>
 
           {/* By horizon */}
           {accuracyByHorizon.length > 0 && (
             <section>
-              <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-                Accuracy by forecast horizon
-              </h2>
-              <p className="text-xs text-gray-400 mb-3">
-                How far ahead was the forecast made? Accuracy typically degrades at longer horizons.
+              <SectionLabel>Accuracy by Forecast Horizon</SectionLabel>
+              <p className="text-xs text-muted mb-4">
+                Accuracy typically degrades at longer horizons.
               </p>
-              <div className="border border-gray-200 rounded-lg overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left px-4 py-3 font-medium text-gray-600">Horizon</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-600">Scored</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-600">MAE</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-600">Bias</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {accuracyByHorizon
-                      .filter((row) => row.horizon >= 0 && row.horizon <= 5)
-                      .map((row) => {
-                        const b = fmtBias(row.avgBias);
-                        return (
-                          <tr key={row.horizon} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 font-medium">{horizonLabel(row.horizon)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums text-gray-600">{row.scoredCount}</td>
-                            <td className="px-4 py-3 text-right tabular-nums">{fmtError(row.avgAbsoluteError)}</td>
-                            <td className={`px-4 py-3 text-right tabular-nums ${b.cls}`}>{b.label}</td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                head={
+                  <>
+                    <th className="text-left px-4 py-3">Horizon</th>
+                    <th className="text-right px-4 py-3">Scored</th>
+                    <th className="text-right px-4 py-3">MAE</th>
+                    <th className="text-right px-4 py-3">Bias</th>
+                  </>
+                }
+              >
+                {accuracyByHorizon
+                  .filter((row) => row.horizon >= 0 && row.horizon <= 5)
+                  .map((row) => {
+                    const b = fmtBias(row.avgBias);
+                    return (
+                      <tr key={row.horizon} className="hover:bg-cream-tinted transition-colors">
+                        <td className="px-4 py-3 font-medium text-ink">{horizonLabel(row.horizon)}</td>
+                        <td className="px-4 py-3 text-right text-muted tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>{row.scoredCount}</td>
+                        <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>{fmtError(row.avgAbsoluteError)}</td>
+                        <td className={`px-4 py-3 text-right tabular-nums ${b.cls}`} style={{ fontFamily: "var(--font-mono)" }}>{b.label}</td>
+                      </tr>
+                    );
+                  })}
+              </DataTable>
             </section>
           )}
 
-          {/* Full breakdown by variable */}
+          {/* Full breakdown */}
           <section>
-            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">
-              Full breakdown
-            </h2>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Variable</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Country</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">Forecasts</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">MAE</th>
-                    <th className="text-right px-4 py-3 font-medium text-gray-600">vs consensus</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {accuracyByVariable.map((row) => (
-                    <tr key={row.variableId} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <Link href={`/variables/${row.variableId}`} className="hover:underline">
-                          {row.variableName}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{row.countryCode}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.forecastCount}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {row.avgAbsoluteError != null
-                          ? parseFloat(row.avgAbsoluteError).toFixed(2)
-                          : <span className="text-gray-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {row.avgScoreVsConsensus != null ? (
-                          <span className={parseFloat(row.avgScoreVsConsensus) < 0 ? "text-green-600" : "text-red-600"}>
-                            {parseFloat(row.avgScoreVsConsensus) > 0 ? "+" : ""}
-                            {parseFloat(row.avgScoreVsConsensus).toFixed(2)}
-                          </span>
-                        ) : <span className="text-gray-400">—</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <SectionLabel>Full Breakdown</SectionLabel>
+            <DataTable
+              head={
+                <>
+                  <th className="text-left px-4 py-3">Variable</th>
+                  <th className="text-left px-4 py-3">Country</th>
+                  <th className="text-right px-4 py-3">Forecasts</th>
+                  <th className="text-right px-4 py-3">MAE</th>
+                  <th className="text-right px-4 py-3">vs Consensus</th>
+                </>
+              }
+            >
+              {accuracyByVariable.map((row) => (
+                <tr key={row.variableId} className="hover:bg-cream-tinted transition-colors">
+                  <td className="px-4 py-3">
+                    <Link href={`/variables/${row.variableId}`} className="text-ink hover:text-amber transition-colors">
+                      {row.variableName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-muted text-xs font-medium tracking-wide">{row.countryCode}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-muted" style={{ fontFamily: "var(--font-mono)" }}>{row.forecastCount}</td>
+                  <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
+                    {row.avgAbsoluteError != null
+                      ? parseFloat(row.avgAbsoluteError).toFixed(2)
+                      : <span className="text-muted">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums" style={{ fontFamily: "var(--font-mono)" }}>
+                    {row.avgScoreVsConsensus != null ? (
+                      <span className={parseFloat(row.avgScoreVsConsensus) < 0 ? "text-signal-green" : "text-signal-red"}>
+                        {parseFloat(row.avgScoreVsConsensus) > 0 ? "+" : ""}
+                        {parseFloat(row.avgScoreVsConsensus).toFixed(2)}
+                      </span>
+                    ) : <span className="text-muted">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </DataTable>
           </section>
         </>
       )}
