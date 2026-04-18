@@ -9,7 +9,7 @@ export default async function PublicLayout({ children }: { children: React.React
 
   return (
     <div className="min-h-screen bg-white text-ink">
-      <header className="border-b border-border bg-white sticky top-0 z-10">
+      <header className="border-b border-border bg-white/90 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex flex-col leading-none group">
             <span
