@@ -22,7 +22,7 @@
 
 import { db } from "../db";
 import { forecasts, actuals, consensusForecasts, forecastScores } from "../db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Metric functions — pure, no DB access
@@ -248,11 +248,21 @@ export async function scoreAllPending(): Promise<{ scored: number; skipped: numb
 
 // ---------------------------------------------------------------------------
 // Re-score all forecasts (e.g. after actuals or consensus are updated)
+// Uses bulk queries instead of N+1 to avoid Neon connection resets.
 // ---------------------------------------------------------------------------
 
 export async function rescoreAll(): Promise<{ scored: number; skipped: number }> {
-  const all = await db
-    .select({ id: forecasts.id })
+  // 1. All (forecast, actual) pairs in one JOIN
+  const pairs = await db
+    .select({
+      forecastId: forecasts.id,
+      variableId: forecasts.variableId,
+      targetPeriod: forecasts.targetPeriod,
+      forecastValue: forecasts.value,
+      forecastMadeAt: forecasts.forecastMadeAt,
+      actualId: actuals.id,
+      actualValue: actuals.value,
+    })
     .from(forecasts)
     .innerJoin(
       actuals,
@@ -263,14 +273,80 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
       )
     );
 
-  let scored = 0;
-  let skipped = 0;
+  if (pairs.length === 0) return { scored: 0, skipped: 0 };
 
-  for (const { id } of all) {
-    const ok = await scoreForecast(id);
-    if (ok) scored++;
-    else skipped++;
+  // 2. All first-release actuals (for prior-year directional accuracy lookups)
+  const allActuals = await db
+    .select({ variableId: actuals.variableId, targetPeriod: actuals.targetPeriod, value: actuals.value })
+    .from(actuals)
+    .where(eq(actuals.releaseNumber, 1));
+  const actualByKey = new Map<string, number>();
+  for (const a of allActuals) {
+    actualByKey.set(`${a.variableId}|${a.targetPeriod}`, parseFloat(a.value));
   }
 
-  return { scored, skipped };
+  // 3. All consensus forecasts
+  const allConsensus = await db
+    .select({ variableId: consensusForecasts.variableId, targetPeriod: consensusForecasts.targetPeriod, simpleMean: consensusForecasts.simpleMean })
+    .from(consensusForecasts);
+  const consensusByKey = new Map<string, number>();
+  for (const c of allConsensus) {
+    consensusByKey.set(`${c.variableId}|${c.targetPeriod}`, parseFloat(c.simpleMean));
+  }
+
+  // 4. Compute scores in memory
+  const scoreRows: (typeof forecastScores.$inferInsert)[] = [];
+  for (const p of pairs) {
+    const fv = parseFloat(p.forecastValue);
+    const av = parseFloat(p.actualValue);
+
+    const isAnnual = /^\d{4}$/.test(p.targetPeriod);
+    const priorActual = isAnnual
+      ? (actualByKey.get(`${p.variableId}|${String(parseInt(p.targetPeriod, 10) - 1)}`) ?? null)
+      : null;
+    const consensusValue = consensusByKey.get(`${p.variableId}|${p.targetPeriod}`) ?? null;
+
+    const absoluteError     = computeAbsoluteError(fv, av);
+    const percentageError   = computePercentageError(fv, av);
+    const directionalCorrect = computeDirectionalAccuracy(fv, av, priorActual);
+    const scoreVsConsensus  = computeScoreVsConsensus(fv, av, consensusValue);
+    const signedError       = computeSignedError(fv, av);
+    const horizonMonths     = computeHorizonMonths(p.forecastMadeAt ?? null, p.targetPeriod);
+
+    scoreRows.push({
+      forecastId: p.forecastId,
+      actualId: p.actualId,
+      methodologyVersion: "v1.0",
+      absoluteError:    isNaN(absoluteError)    ? null : String(absoluteError),
+      percentageError:  isNaN(percentageError)  ? null : String(percentageError),
+      directionalCorrect,
+      scoreVsConsensus: scoreVsConsensus !== null && !isNaN(scoreVsConsensus) ? String(scoreVsConsensus) : null,
+      signedError:      isNaN(signedError)      ? null : String(signedError),
+      horizonMonths,
+    });
+  }
+
+  // 5. Batch upsert in chunks of 500
+  const BATCH = 500;
+  for (let i = 0; i < scoreRows.length; i += BATCH) {
+    await db
+      .insert(forecastScores)
+      .values(scoreRows.slice(i, i + BATCH))
+      .onConflictDoUpdate({
+        target: forecastScores.forecastId,
+        set: {
+          actualId:          sql`excluded.actual_id`,
+          methodologyVersion: sql`excluded.methodology_version`,
+          absoluteError:     sql`excluded.absolute_error`,
+          percentageError:   sql`excluded.percentage_error`,
+          directionalCorrect: sql`excluded.directional_correct`,
+          scoreVsConsensus:  sql`excluded.score_vs_consensus`,
+          signedError:       sql`excluded.signed_error`,
+          horizonMonths:     sql`excluded.horizon_months`,
+          computedAt:        new Date(),
+        },
+      });
+  }
+
+  return { scored: scoreRows.length, skipped: 0 };
 }
