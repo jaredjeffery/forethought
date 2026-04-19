@@ -1,5 +1,58 @@
 # Forethought — Progress Log
 
+## Session 2026-04-18 / 2026-04-19
+
+### Completed
+
+**Schema migrations (migration 0002)**
+- Added `scoring_methodologies` table (version, effectiveFrom, description, codeRef, vintagePolicy); seeded v1.0
+- Extended `actuals`: `vintage_date`, `release_number` (default 1), `is_latest`; unique constraint changed to `(variableId, targetPeriod, source, releaseNumber)` to support initial-release vs revision tracking
+- Extended `forecasts`: `forecast_made_at` (nullable timestamp)
+- Extended `forecast_scores`: `actual_id`, `methodology_version`, `horizon_months`, `signed_error`
+- Applied via custom `scripts/apply-migration.ts` + `scripts/fix-migration-hash.ts` (drizzle-kit migrate hangs on Neon serverless)
+
+**Scoring engine updates**
+- Scoring policy: always score against `release_number = 1` actuals
+- Every score row now stores `actual_id`, `methodology_version: "v1.0"`, `signed_error` (forecast − actual), `horizon_months`
+- `rescoreAll()` rewritten from N+1 to 4 bulk queries — avoids Neon ECONNRESET under sequential load
+
+**Premium UI redesign (8 tasks, subagent-driven)**
+- New design tokens: `--bg: #F7F8FA`, `--surface: #FFFFFF`, `--ink: #111827`, `--accent: #1D4ED8`; `.card` / `.card-raised` CSS classes; shadow + radius tokens
+- Font: Inter (400/500/600), display font via CSS variable
+- New shared components: `Card`, `MetricCard`, `SectionLabel`
+- Rebuilt pages: landing hero (two-column, live leaderboard), `/variables` (larger chart at 480px, card-wrapped), `/forecasters` (metric grid strip, performance highlights), `/forecasters/[slug]` (bias colour-coded), `/variables/[id]` (actuals strip, hover table)
+- `ForecastChart`: no cobalt, consensus always solid blue, actuals bold with dots
+- Layout: max-width expanded to 1200–1280px
+
+**Phase 1 data completion**
+- `backfill-forecast-made-at.ts`: one UPDATE per vintage label using WEO_VINTAGES publication dates; 9,864 rows updated
+- `rescore-all.ts`: rescored 3,339 forecasts with new fields via bulk query
+- `ingest-commodity-prices.ts`: parsed Commodity Prices sheet from WEOOct2025all.xlsx; created 74 COMMODITY variables, inserted 3,243 actuals (1980–2024) and 450 IMF forecasts (2025–2030)
+
+**Auth**
+- Google OAuth via Auth.js v5 (NextAuth); session-aware public layout header (Sign in / Dashboard / Sign out)
+
+### Current state
+
+- **Live site**: forethought-two.vercel.app
+- **Database**: ~13,000 forecasts (macro + commodity), 272 variables, 10 forecasters, 3,339 scored, 74 commodity variables
+- **Scoring**: all existing forecast/actual pairs scored with signed_error, horizon_months, methodology_version v1.0
+- **Auth**: Google OAuth live; sign-in/out working
+- **Build**: clean, zero errors
+
+### Known issues
+
+- Apr 2026 WEO not yet ingested (expected ~April 22 publication)
+- WLD (World) shows "—" on landing page — World Bank has no aggregate actuals
+- `forecast_made_at` populated for WEO vintages only; other forecasters still null
+- Commodity variables have actuals but no scoring (no WEO-sourced actuals to score commodity forecasts against)
+
+### Next steps (ordered by priority)
+
+1. **Ingest Apr 2026 WEO** when published (~April 22) — run ingest, consensus, rescore
+2. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
+3. **Commodity scoring** — wire commodity forecast scoring once actuals pipeline is established
+
 ## Session 2026-04-14
 
 ### Completed
