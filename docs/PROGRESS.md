@@ -6,25 +6,30 @@
 
 **OECD Economic Outlook ingestion**
 - Built `src/lib/ingestion/oecd-eo.ts` + `scripts/ingest-oecd-eo.ts`
-- Ingests 5 OECD EO editions (EO-114 through EO-118, Nov 2023 – Dec 2025)
-- Variables: GDP Growth Rate, CPI (% YoY from price level), Unemployment Rate, Government Balance, Current Account Balance
+- 5 editions (EO-114 to EO-118, Nov 2023 – Dec 2025): GDP Growth Rate, CPI, Unemployment Rate, Government Balance, Current Account Balance
 - 990 forecasts inserted; 457 new scores (total now 3,796)
-- Key fix: Node.js fetch blocked by Cloudflare Bot Management — replaced with `execSync(curl)` subprocess
-- Key fix: CPI is a price level index in OECD SDMX; computed % YoY change as `((t / t-1) - 1) * 100`
-- Updated `FORECAST_GATHERING_PLAN.md` to mark OECD EO as done
+- Key fix: Node.js fetch blocked by Cloudflare — replaced with `execSync(curl)` subprocess
+- Key fix: CPI is a price level index; computed % YoY change as `((t / t-1) - 1) * 100`
+
+**World Bank GEP ingestion**
+- Built `src/lib/ingestion/wb-gep.ts` + `scripts/ingest-wb-gep.ts`
+- Uses WB Indicators API source 27 (JSON, no Cloudflare issues)
+- One indicator: GDP Growth Rate (`NYGDPMKTPKDZ`). Vintage auto-detected from API `lastupdated`
+- 66 forecasts inserted for WB-GEP-2026-01 (Jan 2026 GEP, 22 countries × 3 forecast years)
+- Limitation: API only serves the latest vintage — no historical archive
 
 ### Current state
 
 - **Live site**: forethought-two.vercel.app
-- **Database**: ~14,000 forecasts (WEO + OECD EO + commodity), 272 variables, 10 forecasters, 3,796 scored
-- **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions)
+- **Database**: ~15,000 forecasts (WEO + OECD EO + WB GEP + commodity), 272 variables, 10 forecasters, 3,796 scored
+- **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage)
 - **Build**: clean, zero errors
 
 ### Next steps (ordered by priority)
 
-1. **World Bank GEP** — Wave 2 completion; hardest ingestion (PDF/XLSX, partial vintage access)
-2. **Ingest Apr 2026 WEO** when published (~April 22) — run ingest, consensus, rescore
-3. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
+1. **Ingest Apr 2026 WEO** when published (~April 22) — run ingest, consensus, rescore
+2. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
+3. **EC AMECO / ECB SPF** — Wave 2 extension (next highest leverage institutional sources)
 
 ## Session 2026-04-18 / 2026-04-19
 

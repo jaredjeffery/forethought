@@ -36,7 +36,7 @@ Targets, in order:
 
 OECD Economic Outlook via SDMX API. **DONE (2026-04-20).** 5 editions (EO-114 to EO-118, Dec 2023 – Dec 2025) ingested: 990 forecasts across GDP, CPI, unemployment, government balance, current account for 33 countries. `src/lib/ingestion/oecd-eo.ts` + `scripts/ingest-oecd-eo.ts`. Note: Node.js fetch blocked by Cloudflare; uses curl subprocess. CPI computed as % YoY change from price level index. To extend back to EO-113 and earlier, older edition-specific dataflows need confirming via SDMX catalogue.
 
-World Bank Global Economic Prospects. Most coverage via PDF + some XLSX annexures. Worth the parsing cost for country-panel coverage, especially EM where Jared wants depth. Complements WEO on EMDE countries.
+World Bank Global Economic Prospects. **DONE (2026-04-20).** `src/lib/ingestion/wb-gep.ts` + `scripts/ingest-wb-gep.ts`. Uses WB Indicators API source 27 (JSON). One indicator only: `NYGDPMKTPKDZ` = GDP Growth Rate. 66 forecasts for current vintage (WB-GEP-2026-01, Jan 2026 GEP). Vintage auto-detected from `lastupdated` in API response — re-running when June 2026 GEP publishes will create a new vintage automatically. Limitation: API only exposes the latest published vintage (no historical archive via API).
 
 European Commission AMECO database + quarterly forecasts. AMECO is API-friendly for historical series; forecast vintages require pulling spring/autumn forecast XLSX annexures from the EC economic forecasts archive. High payoff for euro-area country coverage and fiscal projections.
 
