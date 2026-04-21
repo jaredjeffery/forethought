@@ -1,5 +1,36 @@
 # Forethought — Progress Log
 
+## Session 2026-04-21
+
+### Completed
+
+**Apr 2026 WEO ingested**
+- 1,025 forecasts inserted (WEO 2026-Apr vintage)
+- Aggregate actuals backfill updated to use latest WEO file dynamically + upsert (not skip) — now includes 2025 actuals confirmed by Apr 2026 WEO
+- Rescore: 4,057 → 4,116
+
+**Consensus engine fixed**
+- `computeAllConsensus()` rewrote N+1 pattern to single bulk GROUP BY query + batch upsert
+- Previous version hung on Neon serverless with >2,500 variable+period pairs
+
+**Actuals policy established**
+- WEO is now the default actuals source for all variables/countries
+- Only override with data directly from a national authority (ONS, BEA, Stats SA, etc.)
+- Not from secondary compilers like World Bank
+- `backfill-aggregate-actuals.ts` now auto-detects the latest WEO file
+
+### Current state
+
+- **Live site**: forethought-two.vercel.app
+- **Database**: ~17,000 forecasts, ~6,800 actuals, 272 variables, 10 forecasters, 4,116 scored
+- **WEO vintages**: 12 (Apr 2007 – Apr 2026)
+- **Build**: clean, zero errors
+
+### Next steps (ordered by priority)
+
+1. **Philly Fed SPF** — next Wave 2 source; clean Excel downloads, deep US history
+2. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
+
 ## Session 2026-04-20
 
 ### Completed
