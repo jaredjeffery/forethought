@@ -18,18 +18,30 @@
 - 66 forecasts inserted for WB-GEP-2026-01 (Jan 2026 GEP, 22 countries × 3 forecast years)
 - Limitation: API only serves the latest vintage — no historical archive
 
+**ECB/Eurosystem Macroeconomic Projection Database (MPD) ingestion**
+- Built `src/lib/ingestion/ecb-mpd.ts` + `scripts/ingest-ecb-mpd.ts`
+- 33 vintages (Autumn/Spring/Winter 2015–2025): GDP Growth Rate, Inflation (CPI), Unemployment Rate for Euro Area
+- 315 forecasts inserted; 0 new scores (no EA actuals in DB yet — WB actuals pipeline covers individual countries only)
+- Uses ECB SDW SDMX REST API; path-based dimension filter + CSV format; no auth/Cloudflare issues
+- `ECB_ALL=1` flag available to extend back to 2001 (109 total vintages)
+
 ### Current state
 
 - **Live site**: forethought-two.vercel.app
-- **Database**: ~15,000 forecasts (WEO + OECD EO + WB GEP + commodity), 272 variables, 10 forecasters, 3,796 scored
-- **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage)
+- **Database**: ~15,000 forecasts (WEO + OECD EO + WB GEP + ECB MPD + commodity), 272 variables, 10 forecasters, 3,796 scored
+- **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage), ECB MPD (33 vintages)
 - **Build**: clean, zero errors
+
+### Known issues
+
+- ECB forecasts don't score yet — need EA actuals (Eurostat or ECB SDW historical series)
+- Apr 2026 WEO not yet ingested (expected ~April 22)
 
 ### Next steps (ordered by priority)
 
 1. **Ingest Apr 2026 WEO** when published (~April 22) — run ingest, consensus, rescore
-2. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
-3. **EC AMECO / ECB SPF** — Wave 2 extension (next highest leverage institutional sources)
+2. **EA actuals** — ingest Eurostat or ECB SDW historical GDP/CPI/unemployment for EA to enable ECB scoring
+3. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
 
 ## Session 2026-04-18 / 2026-04-19
 

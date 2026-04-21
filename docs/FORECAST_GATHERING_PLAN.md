@@ -38,6 +38,8 @@ OECD Economic Outlook via SDMX API. **DONE (2026-04-20).** 5 editions (EO-114 to
 
 World Bank Global Economic Prospects. **DONE (2026-04-20).** `src/lib/ingestion/wb-gep.ts` + `scripts/ingest-wb-gep.ts`. Uses WB Indicators API source 27 (JSON). One indicator only: `NYGDPMKTPKDZ` = GDP Growth Rate. 66 forecasts for current vintage (WB-GEP-2026-01, Jan 2026 GEP). Vintage auto-detected from `lastupdated` in API response — re-running when June 2026 GEP publishes will create a new vintage automatically. Limitation: API only exposes the latest published vintage (no historical archive via API).
 
+ECB/Eurosystem Macroeconomic Projections (MPD). **DONE (2026-04-20).** `src/lib/ingestion/ecb-mpd.ts` + `scripts/ingest-ecb-mpd.ts`. 33 vintages (2015–2025, 3 per year: Autumn/Spring/Winter), 315 forecasts for GDP/CPI/Unemployment for Euro Area. Uses ECB SDW SDMX REST API — no auth issues. `ECB_ALL=1` extends back to 2001. Note: ECB forecasts don't score yet because EA actuals are missing; needs Eurostat/ECB SDW actuals pipeline.
+
 European Commission AMECO database + quarterly forecasts. AMECO is API-friendly for historical series; forecast vintages require pulling spring/autumn forecast XLSX annexures from the EC economic forecasts archive. High payoff for euro-area country coverage and fiscal projections.
 
 ECB SPF via ECB data portal. Long-running survey consensus; easy structured download; excellent cross-check against official projections. Adds forecast-density data for euro-area headline variables.
