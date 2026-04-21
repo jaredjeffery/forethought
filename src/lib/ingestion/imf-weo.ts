@@ -258,7 +258,7 @@ function parseCSVLine(line: string): string[] {
 // Pass vintage.year - 1 (e.g. 2024 for the Oct-2025 or Apr-2026 release).
 // ---------------------------------------------------------------------------
 
-function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number): WeoRow[] {
+export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number): WeoRow[] {
   if (!existsSync(filePath)) {
     throw new Error(`WEO file not found: ${filePath}\nSee instructions in src/lib/ingestion/imf-weo.ts`);
   }

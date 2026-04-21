@@ -67,22 +67,42 @@ export async function computeAllConsensus(): Promise<{
   computed: number;
   skipped: number;
 }> {
-  // Get all distinct variable + period combinations with at least 1 forecast
-  const pairs = await db
-    .selectDistinct({
+  // Compute mean + count for every variable+period in one GROUP BY query
+  const grouped = await db
+    .select({
       variableId: forecasts.variableId,
       targetPeriod: forecasts.targetPeriod,
+      mean: avg(sql<string>`${forecasts.value}::numeric`),
+      n: count(forecasts.id),
     })
-    .from(forecasts);
+    .from(forecasts)
+    .groupBy(forecasts.variableId, forecasts.targetPeriod);
 
-  let computed = 0;
-  let skipped = 0;
+  const rows = grouped.filter((r) => r.mean !== null && Number(r.n) > 0);
+  if (rows.length === 0) return { computed: 0, skipped: 0 };
 
-  for (const { variableId, targetPeriod } of pairs) {
-    const result = await computeConsensus(variableId, targetPeriod);
-    if (result) computed++;
-    else skipped++;
+  // Batch upsert in chunks of 500
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    await db
+      .insert(consensusForecasts)
+      .values(
+        rows.slice(i, i + BATCH).map((r) => ({
+          variableId: r.variableId,
+          targetPeriod: r.targetPeriod,
+          simpleMean: String(parseFloat(r.mean!)),
+          nForecasters: Number(r.n),
+        }))
+      )
+      .onConflictDoUpdate({
+        target: [consensusForecasts.variableId, consensusForecasts.targetPeriod],
+        set: {
+          simpleMean: sql`excluded.simple_mean`,
+          nForecasters: sql`excluded.n_forecasters`,
+          computedAt: new Date(),
+        },
+      });
   }
 
-  return { computed, skipped };
+  return { computed: rows.length, skipped: grouped.length - rows.length };
 }

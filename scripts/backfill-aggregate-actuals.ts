@@ -14,16 +14,28 @@ import { join } from "path";
 import { db } from "../src/lib/db";
 import { actuals, variables } from "../src/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { parseWeoXlsxFile, SUBJECT_CODE_MAP } from "../src/lib/ingestion/imf-weo";
+import { parseWeoXlsxFile, parseWeoCsvFile, WEO_VINTAGES, SUBJECT_CODE_MAP } from "../src/lib/ingestion/imf-weo";
+import { sql } from "drizzle-orm";
 
 const AGGREGATE_CODES = new Set(["EA", "WLD", "G7", "ADV", "EME"]);
-const WEO_FILE = join(process.cwd(), "data", "weo", "WEOOct2025all.xlsx");
-const PUBLISHED_AT = new Date("2025-10-22"); // Oct-2025 WEO publication date
 const SOURCE = "IMF-WEO";
-const FALLBACK_ESTIMATES_YEAR = 2024; // Oct-2025: actuals available through 2024
+const DATA_DIR = join(process.cwd(), "data", "weo");
+
+// Find the most recent WEO vintage that has a local file
+function findLatestVintage() {
+  const { existsSync } = require("fs");
+  for (const v of WEO_VINTAGES) {
+    const file = v.xlsx_file ?? v.csv_file;
+    if (file && existsSync(join(DATA_DIR, file))) return v;
+  }
+  throw new Error("No WEO data files found in data/weo/");
+}
 
 async function main() {
-  console.log("Backfilling aggregate actuals from WEO Oct-2025 xlsx...");
+  const vintage = findLatestVintage();
+  const fallbackEstimatesYear = vintage.year - 1;
+  const file = vintage.xlsx_file ?? vintage.csv_file!;
+  console.log(`Backfilling aggregate actuals from ${vintage.label} (${file})...`);
 
   // Build variable lookup: "name|countryCode" → id
   const allVars = await db
@@ -36,7 +48,11 @@ async function main() {
     variableMap.set(`${v.name}|${v.countryCode}`, v.id);
   }
 
-  const rows = parseWeoXlsxFile(WEO_FILE, FALLBACK_ESTIMATES_YEAR);
+  const filePath = join(DATA_DIR, file);
+  const rows = vintage.xlsx_file
+    ? parseWeoXlsxFile(filePath, fallbackEstimatesYear)
+    : parseWeoCsvFile(filePath, fallbackEstimatesYear);
+  const PUBLISHED_AT = new Date(vintage.publication_date);
 
   const actualRows: (typeof actuals.$inferInsert)[] = [];
   let skipped = 0;
@@ -77,7 +93,10 @@ async function main() {
     const result = await db
       .insert(actuals)
       .values(actualRows.slice(i, i + BATCH))
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: [actuals.variableId, actuals.targetPeriod, actuals.source, actuals.releaseNumber],
+        set: { value: sql`excluded.value`, publishedAt: sql`excluded.published_at`, isLatest: sql`excluded.is_latest` },
+      })
       .returning({ id: actuals.id });
     inserted += result.length;
   }
