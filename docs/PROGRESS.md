@@ -32,16 +32,28 @@
 - **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage), ECB MPD (33 vintages)
 - **Build**: clean, zero errors
 
+**Aggregate actuals backfill**
+- `scripts/backfill-aggregate-actuals.ts` — extracts historical years from WEO Oct-2025 xlsx for EA, WLD, G7, ADV, EME
+- 915 actuals inserted (source: IMF-WEO, 6 variables × up to ~45 years per aggregate)
+- Rescore: 3,796 → 4,057 (+261 new scores)
+- Fixes: ECB MPD forecasts now score; World GDP "—" on landing page resolved
+
+### Current state
+
+- **Live site**: forethought-two.vercel.app
+- **Database**: ~16,000 forecasts, ~5,900 actuals, 272 variables, 10 forecasters, 4,057 scored
+- **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage), ECB MPD (33 vintages)
+- **Build**: clean, zero errors
+
 ### Known issues
 
-- ECB forecasts don't score yet — need EA actuals (Eurostat or ECB SDW historical series)
 - Apr 2026 WEO not yet ingested (expected ~April 22)
 
 ### Next steps (ordered by priority)
 
-1. **Ingest Apr 2026 WEO** when published (~April 22) — run ingest, consensus, rescore
-2. **EA actuals** — ingest Eurostat or ECB SDW historical GDP/CPI/unemployment for EA to enable ECB scoring
-3. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
+1. **Ingest Apr 2026 WEO** when published (~April 22) — run ingest, consensus, rescore, backfill-aggregate-actuals
+2. **Analyst onboarding** — Phase 2: registration flow, profile pages, forecast submission form
+3. **Philly Fed SPF** — next Wave 2 source; clean Excel downloads, deep US history
 
 ## Session 2026-04-18 / 2026-04-19
 
