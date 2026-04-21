@@ -33,7 +33,7 @@ import { forecasters, variables, forecasts } from "../db/schema";
 // WEO subject code → our variable name  (same codes in both old and new format)
 // ---------------------------------------------------------------------------
 
-const SUBJECT_CODE_MAP: Record<string, string> = {
+export const SUBJECT_CODE_MAP: Record<string, string> = {
   NGDP_RPCH:    "GDP Growth Rate",        // GDP, constant prices, % change
   PCPIPCH:      "Inflation (CPI)",         // CPI, average % change
   LUR:          "Unemployment Rate",       // % of labour force
@@ -136,7 +136,7 @@ const DATA_DIR = join(process.cwd(), "data", "weo");
 // Shared row type — output of both parsers
 // ---------------------------------------------------------------------------
 
-interface WeoRow {
+export interface WeoRow {
   countryCode: string;
   subjectCode: string;
   yearData: Record<string, string>; // "2024" → "2.5"
@@ -150,7 +150,7 @@ interface WeoRow {
 // Year columns are integer headers (1980, 1981 … 2030).
 // ---------------------------------------------------------------------------
 
-function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number): WeoRow[] {
+export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number): WeoRow[] {
   if (!existsSync(filePath)) {
     throw new Error(`WEO file not found: ${filePath}\nSee instructions in src/lib/ingestion/imf-weo.ts`);
   }
