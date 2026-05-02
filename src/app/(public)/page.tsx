@@ -204,103 +204,52 @@ export default async function LandingPage() {
 
   return (
     <div className="space-y-20">
-      <section className="relative overflow-hidden border-b border-border pb-14 pt-4">
-        <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+      <section className="border-b border-border pb-10 pt-2">
+        <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-accent">
-              Forecast accountability
+            <p className="text-xs font-bold uppercase tracking-widest text-accent">
+              Forecast observatory
             </p>
             <h1
-              className="max-w-4xl text-6xl leading-[1.02] tracking-tight text-ink"
+              className="mt-2 text-5xl leading-none tracking-tight text-ink"
               style={{ fontFamily: "var(--font-display)" }}
             >
               Farfield
             </h1>
-            <p className="mt-5 max-w-3xl text-2xl leading-snug text-ink">
-              Public economic forecasts, preserved by vintage and checked against actual outcomes.
+            <p className="mt-3 max-w-2xl text-lg leading-7 text-muted">
+              Economic forecasting, public records, and analysis from the people trying to see what comes next.
             </p>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-muted">
-              Visitors can inspect actuals, source depth, coverage, and public trust signals.
-              Subscribers will see current consensus, vintage history, dispersion, and exports.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/variables"
-                className="inline-flex items-center rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
-              >
-                Browse variables
-              </Link>
-              <Link
-                href="/forecasters"
-                className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
-              >
-                View forecasters
-              </Link>
-              <Link
-                href="/articles"
-                className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
-              >
-                Read notes
-              </Link>
-            </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="border-l-4 border-accent bg-surface px-5 py-4 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted">
-                Tracked forecasts
-              </p>
-              <p className="mt-2 font-mono text-4xl font-bold tabular-nums text-ink">
-                {totalTracked.toLocaleString()}
-              </p>
-            </div>
-            <div className="border-l-4 border-signal-green bg-surface px-5 py-4 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted">
-                Scored rows
-              </p>
-              <p className="mt-2 font-mono text-4xl font-bold tabular-nums text-ink">
-                {totalScored.toLocaleString()}
-              </p>
-            </div>
-            <div className="border-l-4 border-signal-orange bg-surface px-5 py-4 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted">
-                Source families
-              </p>
-              <p className="mt-2 font-mono text-4xl font-bold tabular-nums text-ink">
-                {sourceCount.toLocaleString()}
-              </p>
-            </div>
-            <div className="border-l-4 border-ink bg-surface px-5 py-4 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-widest text-muted">
-                Latest import
-              </p>
-              <p className="mt-2 text-lg font-semibold leading-tight text-ink">
-                {latestSource?.vintageLabel ?? "Pending"}
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                {latestSource?.sourceName ?? "No source document yet"}
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/articles"
+              className="inline-flex items-center rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
+            >
+              Read analysis
+            </Link>
+            <Link
+              href="/variables"
+              className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+            >
+              Browse variables
+            </Link>
+            <Link
+              href="/forecasters"
+              className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+            >
+              View forecasters
+            </Link>
           </div>
         </div>
-      </section>
 
-      <section>
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <SectionLabel className="mb-2">Farfield Editorial</SectionLabel>
-            <h2
-              className="text-4xl tracking-tight text-ink"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Analysis that makes the forecast record worth reading
-            </h2>
-          </div>
+        <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
+          <SectionLabel className="mb-0">Today in Farfield</SectionLabel>
           <Link href="/articles" className="text-sm font-semibold text-accent hover:text-accent-dark">
-            View all articles
+            All articles
           </Link>
         </div>
-        <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+
+        <div className="mt-4 grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
           {leadArticle && (
             <Link href={`/articles/${leadArticle.slug}`} className="group">
               <Card padding="none" raised className="h-full overflow-hidden transition-colors group-hover:border-accent">
@@ -346,6 +295,27 @@ export default async function LandingPage() {
               </Link>
             ))}
           </div>
+        </div>
+
+        <div className="mt-6 grid gap-0 border-y border-border bg-surface sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ["Tracked forecasts", totalTracked.toLocaleString()],
+            ["Scored rows", totalScored.toLocaleString()],
+            ["Source families", sourceCount.toLocaleString()],
+            ["Latest import", latestSource?.vintageLabel ?? "Pending"],
+          ].map(([label, value], index) => (
+            <div
+              key={label}
+              className={`px-4 py-3 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                {label}
+              </p>
+              <p className="mt-1 font-mono text-lg font-bold leading-tight text-ink tabular-nums">
+                {value}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
