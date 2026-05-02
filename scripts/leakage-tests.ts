@@ -201,6 +201,9 @@ async function main() {
       "/articles",
       `/articles/${articles[0]?.slug}`,
       "/methodology",
+      "/methodology/scoring",
+      "/methodology/data-sources",
+      "/methodology/institutions",
       `/methodology/${methodologyNotes[0]?.slug}`,
     ].filter((route) => !route.endsWith("/undefined"));
 

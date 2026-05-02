@@ -7,6 +7,27 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
+const corePages = [
+  {
+    href: "/methodology/scoring",
+    label: "Scoring",
+    title: "Scores, horizons, and vintages",
+    body: "How forecast rows, actual releases, and methodology versions connect.",
+  },
+  {
+    href: "/methodology/data-sources",
+    label: "Data Sources",
+    title: "Source documents and actuals",
+    body: "How Farfield records source documents, ingestion runs, mappings, and quality flags.",
+  },
+  {
+    href: "/methodology/institutions",
+    label: "Institutions",
+    title: "Profiles, claims, and trust panels",
+    body: "What institutions can edit later, and what Farfield keeps fixed.",
+  },
+];
+
 export default function MethodologyPage() {
   return (
     <div className="space-y-12">
@@ -34,7 +55,46 @@ export default function MethodologyPage() {
         </div>
       </section>
 
+      <section>
+        <div className="mb-5">
+          <SectionLabel className="mb-2">Core Pages</SectionLabel>
+          <h2
+            className="text-3xl leading-tight tracking-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            The rules behind the public record
+          </h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {corePages.map((page) => (
+            <Link key={page.href} href={page.href} className="group">
+              <Card padding="lg" className="h-full transition-colors group-hover:border-accent">
+                <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                  {page.label}
+                </p>
+                <h2
+                  className="mt-6 text-2xl leading-tight text-ink group-hover:text-accent"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {page.title}
+                </h2>
+                <p className="mt-4 text-sm leading-6 text-muted">{page.body}</p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-3">
+          <SectionLabel className="mb-2">Methodology Notes</SectionLabel>
+          <h2
+            className="text-3xl leading-tight tracking-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Specific source and access notes
+          </h2>
+        </div>
         {methodologyNotes.map((note) => (
           <Link key={note.slug} href={`/methodology/${note.slug}`} className="group">
             <Card padding="lg" className="h-full min-h-[280px] transition-colors group-hover:border-accent">
