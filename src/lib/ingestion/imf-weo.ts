@@ -171,6 +171,33 @@ function cleanCell(value: string | number | null | undefined): string {
   return String(value ?? "").trim();
 }
 
+function isCsvGroupCode(code: string): boolean {
+  return /^G\d+$/.test(code);
+}
+
+function parseLatestActualYear(
+  rawLatest: string,
+  fallbackEstimatesYear: number,
+  sourceNotes?: string | null,
+): number {
+  if (!rawLatest) return fallbackEstimatesYear;
+
+  const calendarYearMatch = rawLatest.match(/^(\d{4})$/);
+  if (calendarYearMatch) return parseInt(calendarYearMatch[1], 10);
+
+  const fiscalYearMatch = rawLatest.match(/^FY(\d{4})(?:\/\d{2,4})?$/i);
+  if (fiscalYearMatch) {
+    const startYear = parseInt(fiscalYearMatch[1], 10);
+    const normalizedNotes = sourceNotes?.replace(/\s+/g, " ") ?? "";
+    if (/FY\(t-1\/t\)\s*=\s*CY\(t\)/.test(normalizedNotes)) {
+      return startYear + 1;
+    }
+    return startYear;
+  }
+
+  return NaN;
+}
+
 function hasActualMetadata(row: WeoRow): boolean {
   if (row.historicalDataSource) return true;
   if (row.actualCutoffSource === "estimates_start_after") return true;
@@ -216,7 +243,11 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
     const seriesIdx       = headers.findIndex((h) => h === "SERIES_CODE");
     const latestActualIdx = headers.findIndex((h) => h === "LATEST_ACTUAL_ANNUAL_DATA");
     const historicalSourceIdx = headers.findIndex((h) => h === "HISTORICAL_DATA_SOURCE");
-    const sourceNotesIdx = headers.findIndex((h) => h === "FULL_SOURCE_CITATION" || h === "SHORT_SOURCE_CITATION");
+    const sourceNotesIdx = headers.findIndex((h) =>
+      h === "METHODOLOGY_NOTES" ||
+      h === "FULL_SOURCE_CITATION" ||
+      h === "SHORT_SOURCE_CITATION"
+    );
 
     if (seriesIdx === -1) {
       throw new Error(`SERIES_CODE column not found in sheet "${sheetName}" of ${filePath}`);
@@ -239,7 +270,7 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
       if (!SUBJECT_CODE_MAP[subjectCode]) continue;
 
       let countryCode: string | null;
-      if (rawCountryCode.startsWith("G")) {
+      if (isCsvGroupCode(rawCountryCode)) {
         countryCode = GROUP_CODE_MAP_CSV[rawCountryCode] ?? null;
       } else {
         countryCode = rawCountryCode;
@@ -247,14 +278,16 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
       if (!countryCode) continue;
 
       const rawLatest = cleanCell(cols[latestActualIdx]);
-      const estimatesStartAfter = rawLatest
-        ? parseInt(rawLatest, 10)
-        : fallbackEstimatesYear;
-      if (isNaN(estimatesStartAfter)) continue;
       const historicalDataSource =
         historicalSourceIdx >= 0 ? cleanCell(cols[historicalSourceIdx]) || null : null;
       const sourceNotes =
         sourceNotesIdx >= 0 ? cleanCell(cols[sourceNotesIdx]) || null : null;
+      const estimatesStartAfter = parseLatestActualYear(
+        rawLatest,
+        fallbackEstimatesYear,
+        sourceNotes,
+      );
+      if (isNaN(estimatesStartAfter)) continue;
 
       const yearData: Record<string, string> = {};
       for (const { index, year } of yearCols) {
@@ -271,7 +304,7 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
         estimatesStartAfter,
         historicalDataSource,
         actualCutoffSource: rawLatest ? "latest_actual_annual_data" : "fallback_estimates_year",
-        isCountryGroup: rawCountryCode.startsWith("G"),
+        isCountryGroup: isCsvGroupCode(rawCountryCode),
         sourceNotes,
       });
     }
@@ -281,32 +314,47 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
 }
 
 // ---------------------------------------------------------------------------
-// Parse a single quoted CSV line, handling commas inside quoted fields
+// Parse quoted CSV records, including embedded newlines inside quoted fields.
 // ---------------------------------------------------------------------------
 
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
+function parseCSVRecords(text: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
   let current = "";
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (ch === '"') {
       // Handle escaped double-quotes ("") within a quoted field
-      if (inQuotes && line[i + 1] === '"') {
+      if (inQuotes && text[i + 1] === '"') {
         current += '"';
         i++;
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (ch === "," && !inQuotes) {
-      result.push(current);
+    } else if (!inQuotes && ch === ",") {
+      record.push(current);
+      current = "";
+    } else if (!inQuotes && (ch === "\n" || ch === "\r")) {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      record.push(current);
+      if (record.some((value) => value.trim().length > 0)) {
+        records.push(record);
+      }
+      record = [];
       current = "";
     } else {
       current += ch;
     }
   }
-  result.push(current);
-  return result;
+
+  record.push(current);
+  if (record.some((value) => value.trim().length > 0)) {
+    records.push(record);
+  }
+
+  return records;
 }
 
 // ---------------------------------------------------------------------------
@@ -324,20 +372,22 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
   }
 
   const text = readFileSync(filePath, "utf-8");
-  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+  const records = parseCSVRecords(text);
 
-  if (lines.length < 2) {
+  if (records.length < 2) {
     throw new Error(`WEO CSV file appears empty or malformed: ${filePath}`);
   }
 
-  const headers = parseCSVLine(lines[0]);
+  const headers = records[0];
 
   const seriesIdx       = headers.indexOf("SERIES_CODE");
   const latestActualIdx = headers.indexOf("LATEST_ACTUAL_ANNUAL_DATA");
   const historicalSourceIdx = headers.indexOf("HISTORICAL_DATA_SOURCE");
-  const sourceNotesIdx = headers.indexOf("FULL_SOURCE_CITATION") >= 0
-    ? headers.indexOf("FULL_SOURCE_CITATION")
-    : headers.indexOf("SHORT_SOURCE_CITATION");
+  const sourceNotesIdx = headers.indexOf("METHODOLOGY_NOTES") >= 0
+    ? headers.indexOf("METHODOLOGY_NOTES")
+    : headers.indexOf("FULL_SOURCE_CITATION") >= 0
+      ? headers.indexOf("FULL_SOURCE_CITATION")
+      : headers.indexOf("SHORT_SOURCE_CITATION");
 
   if (seriesIdx === -1 || latestActualIdx === -1) {
     throw new Error(
@@ -352,8 +402,8 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
 
   const rows: WeoRow[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseCSVLine(lines[i]);
+  for (let i = 1; i < records.length; i++) {
+    const cols = records[i];
     if (cols.length < headers.length - 1) continue;
 
     const seriesCode = cols[seriesIdx] ?? "";
@@ -370,7 +420,7 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
 
     // Resolve country code: G-prefixed codes are country groups
     let countryCode: string | null;
-    if (rawCountryCode.startsWith("G")) {
+    if (isCsvGroupCode(rawCountryCode)) {
       countryCode = GROUP_CODE_MAP_CSV[rawCountryCode] ?? null;
     } else {
       countryCode = rawCountryCode; // Standard ISO 3-letter code
@@ -380,14 +430,16 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
     // LATEST_ACTUAL_ANNUAL_DATA is empty for most group rows (WLD, ADV, EME, G7)
     // in the new CSV format. Fall back to vintageYear - 1 in that case.
     const rawLatest = cleanCell(cols[latestActualIdx]);
-    const estimatesStartAfter = rawLatest
-      ? parseInt(rawLatest, 10)
-      : fallbackEstimatesYear;
-    if (isNaN(estimatesStartAfter)) continue;
     const historicalDataSource =
       historicalSourceIdx >= 0 ? cleanCell(cols[historicalSourceIdx]) || null : null;
     const sourceNotes =
       sourceNotesIdx >= 0 ? cleanCell(cols[sourceNotesIdx]) || null : null;
+    const estimatesStartAfter = parseLatestActualYear(
+      rawLatest,
+      fallbackEstimatesYear,
+      sourceNotes,
+    );
+    if (isNaN(estimatesStartAfter)) continue;
 
     const yearData: Record<string, string> = {};
     for (const { index, year } of yearCols) {
@@ -404,7 +456,7 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
       estimatesStartAfter,
       historicalDataSource,
       actualCutoffSource: rawLatest ? "latest_actual_annual_data" : "fallback_estimates_year",
-      isCountryGroup: rawCountryCode.startsWith("G"),
+      isCountryGroup: isCsvGroupCode(rawCountryCode),
       sourceNotes,
     });
   }
