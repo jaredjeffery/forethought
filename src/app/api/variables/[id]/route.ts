@@ -1,9 +1,9 @@
 // GET /api/variables/[id]
-// Returns a single variable with its recent forecasts and latest actuals.
+// Returns a single variable with actuals and non-leaky forecast coverage.
 
 import { db } from "@/lib/db";
-import { variables, forecasts, actuals, forecasters, forecastScores } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { variables, forecasts, actuals } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { ok, error, handleError } from "@/lib/api-helpers";
 
 export async function GET(
@@ -21,28 +21,13 @@ export async function GET(
 
     if (!variable) return error("Variable not found", 404);
 
-    // Recent forecasts with forecaster names and scores
-    const recentForecasts = await db
+    const coverageRows = await db
       .select({
-        id: forecasts.id,
         forecasterId: forecasts.forecasterId,
-        forecasterName: forecasters.name,
-        forecasterSlug: forecasters.slug,
         targetPeriod: forecasts.targetPeriod,
-        value: forecasts.value,
-        lowerCi: forecasts.lowerCi,
-        upperCi: forecasts.upperCi,
-        submittedAt: forecasts.submittedAt,
-        vintage: forecasts.vintage,
-        absoluteError: forecastScores.absoluteError,
-        scoreVsConsensus: forecastScores.scoreVsConsensus,
       })
       .from(forecasts)
-      .innerJoin(forecasters, eq(forecasts.forecasterId, forecasters.id))
-      .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-      .where(eq(forecasts.variableId, id))
-      .orderBy(desc(forecasts.submittedAt))
-      .limit(200);
+      .where(eq(forecasts.variableId, id));
 
     // All actuals for this variable
     const observedActuals = await db
@@ -51,7 +36,14 @@ export async function GET(
       .where(eq(actuals.variableId, id))
       .orderBy(actuals.targetPeriod);
 
-    return ok({ variable, forecasts: recentForecasts, actuals: observedActuals });
+    return ok({
+      variable,
+      actuals: observedActuals,
+      forecastCoverage: {
+        forecasterCount: new Set(coverageRows.map((row) => row.forecasterId)).size,
+        targetPeriodCount: new Set(coverageRows.map((row) => row.targetPeriod)).size,
+      },
+    });
   } catch (err) {
     return handleError(err);
   }

@@ -2,11 +2,8 @@
 // Chart is the centrepiece. Latest actual is integrated into the page header.
 
 import { db } from "@/lib/db";
-import {
-  variables, forecasts, actuals, forecasters,
-  forecastScores, consensusForecasts,
-} from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { variables, forecasts, actuals } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
@@ -24,26 +21,13 @@ async function getVariableData(id: string) {
 
   if (!variable) return null;
 
-  const forecastRows = await db
+  const coverageRows = await db
     .select({
-      id: forecasts.id,
       forecasterId: forecasts.forecasterId,
-      forecasterName: forecasters.name,
-      forecasterSlug: forecasters.slug,
       targetPeriod: forecasts.targetPeriod,
-      value: forecasts.value,
-      vintage: forecasts.vintage,
-      submittedAt: forecasts.submittedAt,
-      absoluteError: forecastScores.absoluteError,
-      percentageError: forecastScores.percentageError,
-      scoreVsConsensus: forecastScores.scoreVsConsensus,
-      directionalCorrect: forecastScores.directionalCorrect,
     })
     .from(forecasts)
-    .innerJoin(forecasters, eq(forecasts.forecasterId, forecasters.id))
-    .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(eq(forecasts.variableId, id))
-    .orderBy(forecasts.targetPeriod, desc(forecasts.submittedAt));
+    .where(eq(forecasts.variableId, id));
 
   const actualRows = await db
     .select()
@@ -51,13 +35,14 @@ async function getVariableData(id: string) {
     .where(eq(actuals.variableId, id))
     .orderBy(actuals.targetPeriod);
 
-  const consensusRows = await db
-    .select()
-    .from(consensusForecasts)
-    .where(eq(consensusForecasts.variableId, id))
-    .orderBy(consensusForecasts.targetPeriod);
-
-  return { variable, forecastRows, actualRows, consensusRows };
+  return {
+    variable,
+    actualRows,
+    forecastCoverage: {
+      forecasterCount: new Set(coverageRows.map((row) => row.forecasterId)).size,
+      targetPeriodCount: new Set(coverageRows.map((row) => row.targetPeriod)).size,
+    },
+  };
 }
 
 interface PageProps {
@@ -70,55 +55,18 @@ export default async function VariableDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { variable, forecastRows, actualRows, consensusRows } = data;
+  const { variable, actualRows, forecastCoverage } = data;
 
-  const allPeriods = [
-    ...new Set([
-      ...actualRows.map((a) => a.targetPeriod),
-      ...forecastRows.map((f) => f.targetPeriod),
-    ]),
-  ].sort();
-
-  const forecasterSet = new Map<string, string>();
-  for (const f of forecastRows) {
-    forecasterSet.set(f.forecasterSlug, f.forecasterName);
-  }
-  const seriesList = Array.from(forecasterSet.entries()).map(([slug, name]) => ({ slug, name, color: "" }));
+  const allPeriods = [...new Set(actualRows.map((a) => a.targetPeriod))].sort();
 
   const actualByPeriod = new Map(actualRows.map((a) => [a.targetPeriod, parseFloat(a.value)]));
-  const consensusByPeriod = new Map(consensusRows.map((c) => [c.targetPeriod, parseFloat(c.simpleMean)]));
-
-  const latestVintageByForecaster = new Map<string, string>();
-  for (const f of forecastRows) {
-    const current = latestVintageByForecaster.get(f.forecasterSlug);
-    if (f.vintage && (!current || f.vintage > current)) {
-      latestVintageByForecaster.set(f.forecasterSlug, f.vintage);
-    }
-  }
-
-  const latestForecastByForecasterPeriod = new Map<string, number>();
-  for (const f of forecastRows) {
-    if (f.vintage === latestVintageByForecaster.get(f.forecasterSlug)) {
-      latestForecastByForecasterPeriod.set(`${f.forecasterSlug}|${f.targetPeriod}`, parseFloat(f.value));
-    }
-  }
 
   const chartData: DataPoint[] = allPeriods.map((period) => {
     const row: DataPoint = { period };
     row.actual = actualByPeriod.get(period) ?? null;
-    row.consensus = consensusByPeriod.get(period) ?? null;
-    for (const s of seriesList) {
-      row[s.slug] = latestForecastByForecasterPeriod.get(`${s.slug}|${period}`) ?? null;
-    }
     return row;
   });
 
-  const allSeries = [
-    ...(consensusRows.length > 0 ? [{ slug: "consensus", name: "Consensus", color: "" }] : []),
-    ...seriesList,
-  ];
-
-  const scoredForecasts = forecastRows.filter((f) => f.absoluteError !== null);
   const latestActual = actualRows.at(-1);
   const pctUnit = variable.unit.includes("%");
 
@@ -173,18 +121,40 @@ export default async function VariableDetailPage({ params }: PageProps) {
 
       {/* Chart — the centrepiece */}
       <section>
-        <SectionLabel>Forecast History vs Actuals</SectionLabel>
+        <SectionLabel>Actuals History</SectionLabel>
         <Card
           padding="none"
           raised
           className="pt-6 pb-4 px-4"
           style={{ borderRadius: "var(--radius-lg)" } as React.CSSProperties}
         >
-          <ForecastChart data={chartData} series={allSeries} unit={variable.unit} height={480} />
+          <ForecastChart data={chartData} series={[]} unit={variable.unit} height={480} />
         </Card>
       </section>
 
       {/* Actuals strip — compact horizontal */}
+      <section>
+        <SectionLabel>Forecast Coverage</SectionLabel>
+        <Card padding="md" className="border-l-4 border-l-accent">
+          <div className="grid sm:grid-cols-3 gap-4">
+            <div>
+              <p className="text-xs font-bold tracking-wider text-muted uppercase">Forecasters</p>
+              <p className="mt-1 text-2xl font-semibold text-ink">{forecastCoverage.forecasterCount}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold tracking-wider text-muted uppercase">Target periods</p>
+              <p className="mt-1 text-2xl font-semibold text-ink">{forecastCoverage.targetPeriodCount}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold tracking-wider text-muted uppercase">Premium data</p>
+              <p className="mt-1 text-sm text-muted">
+                Forecast values, consensus history, dispersion, and exports require a subscriber account.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </section>
+
       {actualRows.length > 0 && (
         <section>
           <SectionLabel>Actuals</SectionLabel>
@@ -214,86 +184,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
         </section>
       )}
 
-      {/* Accuracy table */}
-      {scoredForecasts.length > 0 && (
-        <section>
-          <SectionLabel>Forecast Accuracy</SectionLabel>
-          <Card padding="none">
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="border-b border-border bg-bg">
-                  <tr className="text-xs font-bold tracking-wider text-muted uppercase">
-                    <th className="text-left px-5 py-3">Forecaster</th>
-                    <th className="text-left px-5 py-3">Period</th>
-                    <th className="text-right px-5 py-3">Forecast</th>
-                    <th className="text-right px-5 py-3">Abs. error</th>
-                    <th className="text-right px-5 py-3">vs Consensus</th>
-                    <th className="text-center px-5 py-3">Direction</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {scoredForecasts.map((f) => (
-                    <tr key={f.id} className="hover:bg-bg transition-colors">
-                      <td className="px-5 py-3.5">
-                        <Link
-                          href={`/forecasters/${f.forecasterSlug}`}
-                          className="text-base font-medium text-ink hover:text-accent transition-colors"
-                        >
-                          {f.forecasterName}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm font-medium tracking-wide text-muted">
-                        {f.targetPeriod}
-                      </td>
-                      <td
-                        className="px-5 py-3.5 text-right text-base tabular-nums"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {parseFloat(f.value).toFixed(2)}
-                      </td>
-                      <td
-                        className="px-5 py-3.5 text-right text-base tabular-nums"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {f.absoluteError != null ? parseFloat(f.absoluteError).toFixed(2) : "—"}
-                      </td>
-                      <td
-                        className="px-5 py-3.5 text-right text-base tabular-nums"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {f.scoreVsConsensus != null ? (
-                          <span
-                            className={
-                              parseFloat(f.scoreVsConsensus) < 0
-                                ? "text-signal-green font-medium"
-                                : "text-signal-red"
-                            }
-                          >
-                            {parseFloat(f.scoreVsConsensus) > 0 ? "+" : ""}
-                            {parseFloat(f.scoreVsConsensus).toFixed(2)}
-                          </span>
-                        ) : "—"}
-                      </td>
-                      <td
-                        className="px-5 py-3.5 text-center text-base font-medium"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {f.directionalCorrect === null
-                          ? <span className="text-muted">—</span>
-                          : f.directionalCorrect
-                            ? <span className="text-signal-green">✓</span>
-                            : <span className="text-signal-red">✗</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </section>
-      )}
-
-      {forecastRows.length === 0 && actualRows.length === 0 && (
+      {actualRows.length === 0 && (
         <p className="text-base text-muted py-8">
           No data available yet for this variable. Check back after the next data ingestion.
         </p>

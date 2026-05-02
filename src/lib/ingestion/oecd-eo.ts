@@ -19,7 +19,7 @@
 import { execSync } from "child_process";
 import { db } from "../db";
 import { forecasters, variables, forecasts } from "../db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Vintage definitions
@@ -155,11 +155,12 @@ async function fetchEdition(
         `curl -sf -H "Accept: application/vnd.sdmx.data+csv; charset=utf-8" "${url}"`,
         { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       // curl -f exits non-zero on HTTP 4xx/5xx; exit code 22 = HTTP error
-      const code = err?.status ?? err?.code;
+      const errorLike = err as { status?: number; code?: number; message?: string };
+      const code = errorLike.status ?? errorLike.code;
       if (code === 22) { continue; } // 404 or other HTTP error — no data
-      console.warn(`  Batch [${batch.join(",")}] curl error — skipping. ${err?.message ?? err}`);
+      console.warn(`  Batch [${batch.join(",")}] curl error — skipping. ${errorLike.message ?? String(err)}`);
       continue;
     }
     allRows.push(...parseCsv(text));

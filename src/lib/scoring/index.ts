@@ -22,7 +22,7 @@
 
 import { db } from "../db";
 import { forecasts, actuals, consensusForecasts, forecastScores } from "../db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, isNull, sql, desc } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Metric functions — pure, no DB access
@@ -166,6 +166,7 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
         eq(consensusForecasts.targetPeriod, forecast.targetPeriod)
       )
     )
+    .orderBy(desc(consensusForecasts.asOfDate), desc(consensusForecasts.computedAt))
     .limit(1);
   const consensusValue = consensus ? parseFloat(consensus.simpleMean) : null;
 
@@ -288,7 +289,8 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
   // 3. All consensus forecasts
   const allConsensus = await db
     .select({ variableId: consensusForecasts.variableId, targetPeriod: consensusForecasts.targetPeriod, simpleMean: consensusForecasts.simpleMean })
-    .from(consensusForecasts);
+    .from(consensusForecasts)
+    .orderBy(consensusForecasts.variableId, consensusForecasts.targetPeriod, consensusForecasts.asOfDate);
   const consensusByKey = new Map<string, number>();
   for (const c of allConsensus) {
     consensusByKey.set(`${c.variableId}|${c.targetPeriod}`, parseFloat(c.simpleMean));

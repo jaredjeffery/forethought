@@ -11,15 +11,18 @@ config({ path: ".env.local" });
 
 const sql = postgres(process.env.DATABASE_URL!, { ssl: "require", max: 1 });
 
+type MigrationRow = { name: string };
+type PgErrorLike = { code?: string; message?: string };
+
 async function main() {
   console.log("Connecting to database...");
 
   // Check which migrations have already been applied
   const applied = await sql`
     SELECT name FROM drizzle.__drizzle_migrations ORDER BY created_at
-  `.catch(() => [] as { name: string }[]);
+  `.catch(() => [] as MigrationRow[]) as MigrationRow[];
 
-  const appliedNames = new Set(applied.map((r: { name: string }) => r.name));
+  const appliedNames = new Set(applied.map((r) => r.name));
   console.log("Already applied:", [...appliedNames]);
 
   if (appliedNames.has("0002_whole_forgotten_one")) {
@@ -63,18 +66,19 @@ async function main() {
     try {
       await sql.unsafe(stmt);
       console.log(`  OK: ${stmt.slice(0, 60)}...`);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const error = e as PgErrorLike;
       if (
-        e.code === "42701" || // column already exists
-        e.code === "42710" || // constraint already exists
-        e.code === "42P07" || // relation already exists
-        e.code === "42704" || // constraint does not exist (drop IF NOT EXISTS handles this)
-        e.message?.includes("already exists")
+        error.code === "42701" || // column already exists
+        error.code === "42710" || // constraint already exists
+        error.code === "42P07" || // relation already exists
+        error.code === "42704" || // constraint does not exist (drop IF NOT EXISTS handles this)
+        error.message?.includes("already exists")
       ) {
         console.log(`  SKIP (already exists): ${stmt.slice(0, 60)}...`);
       } else {
         console.error(`  ERROR on: ${stmt.slice(0, 80)}`);
-        console.error(`  Code: ${e.code}, Message: ${e.message}`);
+        console.error(`  Code: ${error.code}, Message: ${error.message}`);
         throw e;
       }
     }

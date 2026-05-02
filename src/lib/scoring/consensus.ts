@@ -12,13 +12,20 @@ import { db } from "../db";
 import { forecasts, consensusForecasts } from "../db/schema";
 import { eq, and, avg, count, sql } from "drizzle-orm";
 
+const CONSENSUS_METHODOLOGY_VERSION = "v1.0";
+
+function toDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Compute consensus for a specific variable + target period
 // ---------------------------------------------------------------------------
 
 export async function computeConsensus(
   variableId: string,
-  targetPeriod: string
+  targetPeriod: string,
+  asOfDate = toDateKey()
 ): Promise<{ mean: number; n: number } | null> {
   const [result] = await db
     .select({
@@ -44,14 +51,23 @@ export async function computeConsensus(
     .values({
       variableId,
       targetPeriod,
+      asOfDate,
+      methodologyVersion: CONSENSUS_METHODOLOGY_VERSION,
       simpleMean: String(mean),
       nForecasters: n,
+      includedForecastCount: n,
     })
     .onConflictDoUpdate({
-      target: [consensusForecasts.variableId, consensusForecasts.targetPeriod],
+      target: [
+        consensusForecasts.variableId,
+        consensusForecasts.targetPeriod,
+        consensusForecasts.asOfDate,
+        consensusForecasts.methodologyVersion,
+      ],
       set: {
         simpleMean: String(mean),
         nForecasters: n,
+        includedForecastCount: n,
         computedAt: new Date(),
       },
     });
@@ -80,6 +96,7 @@ export async function computeAllConsensus(): Promise<{
 
   const rows = grouped.filter((r) => r.mean !== null && Number(r.n) > 0);
   if (rows.length === 0) return { computed: 0, skipped: 0 };
+  const asOfDate = toDateKey();
 
   // Batch upsert in chunks of 500
   const BATCH = 500;
@@ -90,15 +107,24 @@ export async function computeAllConsensus(): Promise<{
         rows.slice(i, i + BATCH).map((r) => ({
           variableId: r.variableId,
           targetPeriod: r.targetPeriod,
+          asOfDate,
+          methodologyVersion: CONSENSUS_METHODOLOGY_VERSION,
           simpleMean: String(parseFloat(r.mean!)),
           nForecasters: Number(r.n),
+          includedForecastCount: Number(r.n),
         }))
       )
       .onConflictDoUpdate({
-        target: [consensusForecasts.variableId, consensusForecasts.targetPeriod],
+        target: [
+          consensusForecasts.variableId,
+          consensusForecasts.targetPeriod,
+          consensusForecasts.asOfDate,
+          consensusForecasts.methodologyVersion,
+        ],
         set: {
           simpleMean: sql`excluded.simple_mean`,
           nForecasters: sql`excluded.n_forecasters`,
+          includedForecastCount: sql`excluded.included_forecast_count`,
           computedAt: new Date(),
         },
       });
