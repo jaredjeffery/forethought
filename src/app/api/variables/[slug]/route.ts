@@ -1,4 +1,4 @@
-// GET /api/variables/[id]
+// GET /api/variables/[slug]
 // Returns a single variable with actuals and non-leaky forecast coverage.
 
 import { db } from "@/lib/db";
@@ -8,15 +8,15 @@ import { ok, error, handleError } from "@/lib/api-helpers";
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { slug } = await params;
 
     const [variable] = await db
       .select()
       .from(variables)
-      .where(eq(variables.id, id))
+      .where(eq(variables.slug, slug))
       .limit(1);
 
     if (!variable) return error("Variable not found", 404);
@@ -27,13 +27,13 @@ export async function GET(
         targetPeriod: forecasts.targetPeriod,
       })
       .from(forecasts)
-      .where(eq(forecasts.variableId, id));
+      .where(eq(forecasts.variableId, variable.id));
 
     // All actuals for this variable
     const observedActuals = await db
       .select()
       .from(actuals)
-      .where(eq(actuals.variableId, id))
+      .where(eq(actuals.variableId, variable.id))
       .orderBy(actuals.targetPeriod);
 
     return ok({

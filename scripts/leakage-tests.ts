@@ -6,7 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { db } from "../src/lib/db";
-import { consensusForecasts, forecasts, forecasters } from "../src/lib/db/schema";
+import { consensusForecasts, forecasts, forecasters, variables } from "../src/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 type Failure = {
@@ -121,11 +121,13 @@ async function main() {
   const [sampleForecast] = await db
     .select({
       variableId: forecasts.variableId,
+      variableSlug: variables.slug,
       forecasterSlug: forecasters.slug,
       forecastValue: forecasts.value,
     })
     .from(forecasts)
     .innerJoin(forecasters, eq(forecasters.id, forecasts.forecasterId))
+    .innerJoin(variables, eq(variables.id, forecasts.variableId))
     .limit(1);
 
   if (!sampleForecast) {
@@ -193,7 +195,7 @@ async function main() {
       "Accuracy leaderboard terms found in public landing HTML",
     );
 
-    const variableResponse = await fetch(`${baseUrl}/api/variables/${sampleForecast.variableId}`);
+    const variableResponse = await fetch(`${baseUrl}/api/variables/${sampleForecast.variableSlug}`);
     check("public variable API status", variableResponse.status === 200, `Expected 200, got ${variableResponse.status}`);
 
     const variableJson = await variableResponse.json() as unknown;
@@ -211,7 +213,7 @@ async function main() {
       "weightedMean",
     ]);
 
-    const variableHtmlResponse = await fetch(`${baseUrl}/variables/${sampleForecast.variableId}`);
+    const variableHtmlResponse = await fetch(`${baseUrl}/variables/${sampleForecast.variableSlug}`);
     const variableHtml = await variableHtmlResponse.text();
     check(
       "public variable page status",
@@ -262,7 +264,7 @@ async function main() {
 
   console.log("Leakage tests passed.");
   console.log(`Checked public forecaster: ${sampleForecast.forecasterSlug}`);
-  console.log(`Checked public variable: ${sampleForecast.variableId}`);
+  console.log(`Checked public variable: ${sampleForecast.variableSlug}`);
   process.exit(0);
 }
 

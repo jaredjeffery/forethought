@@ -1,5 +1,4 @@
-// /variables/[id] — variable detail page.
-// Chart is the centrepiece. Latest actual is integrated into the page header.
+// /variables/[slug] - public variable detail page with actuals and locked premium modules.
 
 import { db } from "@/lib/db";
 import { variables, forecasts, actuals } from "@/lib/db/schema";
@@ -12,11 +11,11 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
-async function getVariableData(id: string) {
+async function getVariableData(slug: string) {
   const [variable] = await db
     .select()
     .from(variables)
-    .where(eq(variables.id, id))
+    .where(eq(variables.slug, slug))
     .limit(1);
 
   if (!variable) return null;
@@ -27,12 +26,12 @@ async function getVariableData(id: string) {
       targetPeriod: forecasts.targetPeriod,
     })
     .from(forecasts)
-    .where(eq(forecasts.variableId, id));
+    .where(eq(forecasts.variableId, variable.id));
 
   const actualRows = await db
     .select()
     .from(actuals)
-    .where(eq(actuals.variableId, id))
+    .where(eq(actuals.variableId, variable.id))
     .orderBy(actuals.targetPeriod);
 
   return {
@@ -46,12 +45,12 @@ async function getVariableData(id: string) {
 }
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }
 
 export default async function VariableDetailPage({ params }: PageProps) {
-  const { id } = await params;
-  const data = await getVariableData(id);
+  const { slug } = await params;
+  const data = await getVariableData(slug);
 
   if (!data) notFound();
 

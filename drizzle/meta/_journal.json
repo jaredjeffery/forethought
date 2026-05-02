@@ -29,6 +29,13 @@
       "when": 1777713088515,
       "tag": "0003_phase_0_5_data_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777729148137,
+      "tag": "0004_variable_slug_migration",
+      "breakpoints": true
     }
   ]
 }

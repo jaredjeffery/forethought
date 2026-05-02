@@ -187,7 +187,7 @@ export default async function LandingPage() {
               return (
                 <Link
                   key={variable.id}
-                  href={`/variables/${variable.id}`}
+                  href={`/variables/${variable.slug}`}
                   className="card group px-5 py-4 transition-colors duration-200 hover:border-accent"
                   style={{ borderRadius: "var(--radius-md)" }}
                 >

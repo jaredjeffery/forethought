@@ -136,7 +136,7 @@ export default async function VariablesPage({ searchParams }: PageProps) {
                     <tr key={v.id} className="hover:bg-bg transition-colors">
                       <td className="px-6 py-4">
                         <Link
-                          href={`/variables/${v.id}`}
+                          href={`/variables/${v.slug}`}
                           className="text-base font-semibold text-ink hover:text-accent transition-colors"
                         >
                           {v.name}

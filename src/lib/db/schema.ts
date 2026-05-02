@@ -90,6 +90,8 @@ export const forecasters = pgTable("forecasters", {
 
 export const variables = pgTable("variables", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Stable public route identifier, e.g. "gdp-growth-rate-usa".
+  slug: text("slug").notNull().unique(),
   // Short human-readable name, e.g. "GDP Growth Rate"
   name: text("name").notNull(),
   // ISO alpha-3 or aggregate code
