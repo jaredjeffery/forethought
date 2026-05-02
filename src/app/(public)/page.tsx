@@ -1,8 +1,15 @@
-// Public showcase landing page with actuals-only previews and coverage signals.
+// Public homepage for Farfield with non-leaky editorial, actuals, and trust signals.
 
 import { db } from "@/lib/db";
-import { actuals, forecasters, forecasts, forecastScores, variables } from "@/lib/db/schema";
-import { and, countDistinct, desc, eq, inArray } from "drizzle-orm";
+import {
+  actuals,
+  forecasters,
+  forecasts,
+  forecastScores,
+  sourceDocuments,
+  variables,
+} from "@/lib/db/schema";
+import { countDistinct, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
@@ -11,29 +18,67 @@ export const revalidate = 3600;
 
 const COUNTRY_LABELS: Record<string, string> = {
   WLD: "World",
-  USA: "US",
+  USA: "United States",
   CHN: "China",
-  GBR: "UK",
+  GBR: "United Kingdom",
   ZAF: "South Africa",
+  IND: "India",
+  EA: "Euro Area",
+  G7: "G7",
 };
 
-async function getFeaturedData() {
-  const gdpVars = await db
+const FEATURED_VARIABLES = [
+  { name: "GDP Growth Rate", countryCode: "WLD" },
+  { name: "GDP Growth Rate", countryCode: "USA" },
+  { name: "GDP Growth Rate", countryCode: "CHN" },
+  { name: "Inflation (CPI)", countryCode: "GBR" },
+  { name: "Unemployment Rate", countryCode: "ZAF" },
+  { name: "Current Account Balance", countryCode: "IND" },
+];
+
+const EDITORIAL_PREVIEWS = [
+  {
+    label: "Data note",
+    title: "How Farfield treats WEO actuals",
+    dek: "A short guide to national-authority metadata, fiscal-year mapping, and why first-release scoring matters.",
+    tag: "Methodology",
+  },
+  {
+    label: "Launch brief",
+    title: "The first public forecast record",
+    dek: "What can be checked today across IMF, OECD, ECB, and World Bank source history.",
+    tag: "Forecast record",
+  },
+  {
+    label: "Variable explainer",
+    title: "Why GDP surprises are not all equal",
+    dek: "A plain-English look at horizons, revisions, and why the same miss can mean different things.",
+    tag: "GDP growth",
+  },
+];
+
+async function getHomepageData() {
+  const allVariables = await db
     .select()
     .from(variables)
-    .where(
-      and(
-        eq(variables.name, "GDP Growth Rate"),
-        inArray(variables.countryCode, ["WLD", "USA", "CHN", "GBR", "ZAF"]),
-      ),
-    )
+    .where(eq(variables.category, "MACRO"))
     .orderBy(variables.countryCode, variables.name);
 
-  const gdpActuals = gdpVars.length > 0
+  const featuredVariables = FEATURED_VARIABLES
+    .map((target) =>
+      allVariables.find(
+        (variable) =>
+          variable.name === target.name &&
+          variable.countryCode === target.countryCode,
+      ),
+    )
+    .filter((variable): variable is NonNullable<typeof variable> => Boolean(variable));
+
+  const featuredActuals = featuredVariables.length > 0
     ? await db
         .select()
         .from(actuals)
-        .where(inArray(actuals.variableId, gdpVars.map((v) => v.id)))
+        .where(inArray(actuals.variableId, featuredVariables.map((variable) => variable.id)))
         .orderBy(desc(actuals.targetPeriod), desc(actuals.publishedAt))
     : [];
 
@@ -56,7 +101,20 @@ async function getFeaturedData() {
     .orderBy(desc(countDistinct(forecasts.id)), forecasters.name)
     .limit(8);
 
-  return { gdpVars, gdpActuals, institutions };
+  const sourceRows = await db.select().from(sourceDocuments);
+  const sourceCount = new Set(sourceRows.map((row) => row.sourceName)).size;
+  const latestSource = sourceRows
+    .slice()
+    .sort((a, b) => b.ingestedAt.getTime() - a.ingestedAt.getTime())
+    .at(0);
+
+  return {
+    featuredVariables,
+    featuredActuals,
+    institutions,
+    sourceCount,
+    latestSource,
+  };
 }
 
 function statusLabel(scoredCount: number, forecastCount: number) {
@@ -66,219 +124,323 @@ function statusLabel(scoredCount: number, forecastCount: number) {
   return "No tracked forecasts";
 }
 
-export default async function LandingPage() {
-  const { gdpVars, gdpActuals, institutions } = await getFeaturedData();
+function formatActual(value: string, unit: string) {
+  const parsed = parseFloat(value);
+  const suffix = unit.includes("%") ? "%" : "";
+  return `${parsed > 0 ? "+" : ""}${parsed.toFixed(1)}${suffix}`;
+}
 
-  const latestActuals = new Map<string, { value: string; period: string }>();
-  for (const actual of gdpActuals) {
+export default async function LandingPage() {
+  const {
+    featuredVariables,
+    featuredActuals,
+    institutions,
+    sourceCount,
+    latestSource,
+  } = await getHomepageData();
+
+  const latestActuals = new Map<string, typeof featuredActuals[number]>();
+  for (const actual of featuredActuals) {
     if (!latestActuals.has(actual.variableId)) {
-      latestActuals.set(actual.variableId, {
-        value: parseFloat(actual.value).toFixed(1),
-        period: actual.targetPeriod,
-      });
+      latestActuals.set(actual.variableId, actual);
     }
   }
 
-  const totalTracked = institutions.reduce((sum, row) => sum + Number(row.forecastCount), 0);
-  const totalScored = institutions.reduce((sum, row) => sum + Number(row.scoredCount), 0);
+  const totalTracked = institutions.reduce(
+    (sum, row) => sum + Number(row.forecastCount),
+    0,
+  );
+  const totalScored = institutions.reduce(
+    (sum, row) => sum + Number(row.scoredCount),
+    0,
+  );
+
+  const spotlight = institutions.slice(0, 4);
 
   return (
     <div className="space-y-20">
-      <section className="pt-4 grid gap-12 lg:grid-cols-[1fr_430px] lg:items-start">
-        <div>
-          <p className="mb-4 text-xs font-bold tracking-widest text-accent uppercase">
-            Forecast accountability
-          </p>
-          <h1
-            className="text-[64px] leading-[1.05] text-ink"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            See who forecasts what, and how the record is kept.
-          </h1>
-          <p className="mt-6 max-w-xl text-xl leading-relaxed text-muted">
-            Farfield tracks public economic forecasts, preserves source vintages,
-            scores them against actual outcomes, and keeps premium forecast values
-            behind subscriber access.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/variables"
-              className="inline-flex items-center rounded-[10px] bg-accent px-6 py-3 text-base font-semibold text-white transition-colors duration-200 hover:bg-accent-dark"
-              style={{ boxShadow: "0 1px 3px rgba(29, 78, 216, 0.3)" }}
+      <section className="relative overflow-hidden border-b border-border pb-14 pt-4">
+        <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+          <div>
+            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-accent">
+              Forecast accountability
+            </p>
+            <h1
+              className="max-w-4xl text-6xl leading-[1.02] tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
             >
-              Browse variables
-            </Link>
-            <Link
-              href="/forecasters"
-              className="inline-flex items-center rounded-[10px] border-2 border-border px-6 py-3 text-base font-semibold text-ink transition-colors duration-200 hover:border-accent hover:text-accent"
-            >
-              View forecasters
-            </Link>
+              Farfield
+            </h1>
+            <p className="mt-5 max-w-3xl text-2xl leading-snug text-ink">
+              Public economic forecasts, preserved by vintage and checked against actual outcomes.
+            </p>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-muted">
+              Visitors can inspect actuals, source depth, coverage, and public trust signals.
+              Subscribers will see current consensus, vintage history, dispersion, and exports.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/variables"
+                className="inline-flex items-center rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
+              >
+                Browse variables
+              </Link>
+              <Link
+                href="/forecasters"
+                className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+              >
+                View forecasters
+              </Link>
+            </div>
           </div>
-        </div>
 
-        <Card raised padding="none" className="overflow-hidden">
-          <div className="border-b border-border px-5 pb-3 pt-5">
-            <p className="text-xs font-bold tracking-widest text-accent uppercase">
-              Coverage Snapshot
-            </p>
-            <p className="mt-0.5 text-xs text-muted">
-              Public source depth, not premium forecast values
-            </p>
-          </div>
-          <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
-            <div className="px-5 py-5">
-              <p className="text-xs font-bold uppercase text-muted">Tracked forecasts</p>
-              <p className="mt-2 font-mono text-3xl font-bold text-ink tabular-nums">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="border-l-4 border-accent bg-surface px-5 py-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                Tracked forecasts
+              </p>
+              <p className="mt-2 font-mono text-4xl font-bold tabular-nums text-ink">
                 {totalTracked.toLocaleString()}
               </p>
             </div>
-            <div className="px-5 py-5">
-              <p className="text-xs font-bold uppercase text-muted">Scored sample</p>
-              <p className="mt-2 font-mono text-3xl font-bold text-ink tabular-nums">
+            <div className="border-l-4 border-signal-green bg-surface px-5 py-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                Scored rows
+              </p>
+              <p className="mt-2 font-mono text-4xl font-bold tabular-nums text-ink">
                 {totalScored.toLocaleString()}
               </p>
             </div>
-          </div>
-          <div className="divide-y divide-border">
-            {institutions.slice(0, 5).map((institution) => {
-              const forecastCount = Number(institution.forecastCount);
-              const scoredCount = Number(institution.scoredCount);
-              return (
-                <Link
-                  key={institution.id}
-                  href={`/forecasters/${institution.slug}`}
-                  className="block px-5 py-3.5 transition-colors hover:bg-bg"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm font-semibold text-ink">
-                      {institution.name}
-                    </span>
-                    <span className="shrink-0 text-xs font-medium text-muted">
-                      {statusLabel(scoredCount, forecastCount)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    {forecastCount.toLocaleString()} forecasts / {scoredCount.toLocaleString()} scored
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="border-t border-border px-5 py-3">
-            <Link
-              href="/forecasters"
-              className="text-xs font-semibold text-accent transition-colors hover:text-accent-dark"
-            >
-              View all forecasters
-            </Link>
-          </div>
-        </Card>
-      </section>
-
-      {gdpVars.length > 0 && (
-        <section>
-          <SectionLabel>GDP Growth: Latest Actuals</SectionLabel>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {gdpVars.map((variable) => {
-              const latest = latestActuals.get(variable.id);
-              const value = latest ? parseFloat(latest.value) : null;
-              const isPositive = value !== null && value >= 0;
-              return (
-                <Link
-                  key={variable.id}
-                  href={`/variables/${variable.slug}`}
-                  className="card group px-5 py-4 transition-colors duration-200 hover:border-accent"
-                  style={{ borderRadius: "var(--radius-md)" }}
-                >
-                  <p className="text-xs font-bold uppercase text-muted">
-                    {COUNTRY_LABELS[variable.countryCode] ?? variable.countryCode}
-                  </p>
-                  {latest && value !== null ? (
-                    <>
-                      <p
-                        className={`mt-2 font-mono text-2xl font-bold leading-none tabular-nums ${
-                          isPositive ? "text-signal-green" : "text-signal-red"
-                        }`}
-                      >
-                        {isPositive && value !== 0 ? "+" : ""}{value.toFixed(1)}%
-                      </p>
-                      <p className="mt-2 text-xs text-muted">{latest.period}</p>
-                    </>
-                  ) : (
-                    <p className="mt-2 text-xl text-border-dark">-</p>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-        <div>
-          <SectionLabel>What Public Users See</SectionLabel>
-          <div className="space-y-3">
-            {[
-              "Actual outcomes and source labels",
-              "Which institutions cover a variable",
-              "Coverage counts and scored sample sizes",
-              "Methodology and public trust panels",
-            ].map((item) => (
-              <Card key={item} padding="sm">
-                <p className="text-sm font-medium text-ink">{item}</p>
-              </Card>
-            ))}
-          </div>
-        </div>
-        <div>
-          <SectionLabel>Subscriber Detail</SectionLabel>
-          <Card padding="lg" className="bg-bg">
-            <p className="text-base leading-7 text-muted">
-              Current forecast values, consensus history, vintage changes, dispersion,
-              horizon rankings, and exports stay locked until subscriber access is enabled.
-            </p>
-          </Card>
-        </div>
-      </section>
-
-      <section className="border-t border-border pt-14">
-        <SectionLabel>How It Works</SectionLabel>
-        <div className="grid gap-8 sm:grid-cols-3">
-          {[
-            {
-              n: "01",
-              title: "Sources are archived",
-              body: "Every public forecast vintage is tied to its source document and ingestion run.",
-            },
-            {
-              n: "02",
-              title: "Actuals are versioned",
-              body: "Scores link to the exact actual vintage and methodology version used.",
-            },
-            {
-              n: "03",
-              title: "Premium data is gated",
-              body: "Public pages build trust without exposing current consensus or reconstructive forecast data.",
-            },
-          ].map((item) => (
-            <div key={item.n}>
-              <p
-                className="mb-4 select-none text-4xl font-bold leading-none text-accent-light"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                {item.n}
+            <div className="border-l-4 border-signal-orange bg-surface px-5 py-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                Source families
               </p>
-              <h3
-                className="mb-2 text-lg font-semibold text-ink"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                {item.title}
-              </h3>
-              <p className="text-base leading-relaxed text-muted">{item.body}</p>
+              <p className="mt-2 font-mono text-4xl font-bold tabular-nums text-ink">
+                {sourceCount.toLocaleString()}
+              </p>
             </div>
+            <div className="border-l-4 border-ink bg-surface px-5 py-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                Latest import
+              </p>
+              <p className="mt-2 text-lg font-semibold leading-tight text-ink">
+                {latestSource?.vintageLabel ?? "Pending"}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {latestSource?.sourceName ?? "No source document yet"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Farfield Editorial</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Research notes for the public record
+            </h2>
+          </div>
+          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted">
+            Editorial previews
+          </span>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {EDITORIAL_PREVIEWS.map((article) => (
+            <Card key={article.title} padding="lg" className="min-h-[250px]">
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                    {article.label}
+                  </p>
+                  <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
+                    {article.tag}
+                  </span>
+                </div>
+                <h3
+                  className="mt-8 text-2xl leading-tight text-ink"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {article.title}
+                </h3>
+                <p className="mt-4 text-sm leading-6 text-muted">{article.dek}</p>
+                <p className="mt-auto pt-8 text-xs font-semibold uppercase tracking-widest text-border-dark">
+                  Preview
+                </p>
+              </div>
+            </Card>
           ))}
         </div>
+      </section>
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Actuals Only</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Public macro cards
+            </h2>
+          </div>
+          <Link href="/variables" className="text-sm font-semibold text-accent hover:text-accent-dark">
+            View all variables
+          </Link>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {featuredVariables.map((variable) => {
+            const latest = latestActuals.get(variable.id);
+            const value = latest ? parseFloat(latest.value) : null;
+            const isPositive = value !== null && value >= 0;
+            return (
+              <Link
+                key={variable.id}
+                href={`/variables/${variable.slug}`}
+                className="card group px-5 py-5 transition-colors hover:border-accent"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                      {COUNTRY_LABELS[variable.countryCode] ?? variable.countryCode}
+                    </p>
+                    <h3 className="mt-2 text-base font-semibold text-ink">
+                      {variable.name}
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
+                    {latest?.source ?? "No actual"}
+                  </span>
+                </div>
+                {latest && value !== null ? (
+                  <div className="mt-8 flex items-end justify-between gap-4">
+                    <p
+                      className={`font-mono text-4xl font-bold leading-none tabular-nums ${
+                        isPositive ? "text-signal-green" : "text-signal-red"
+                      }`}
+                    >
+                      {formatActual(latest.value, variable.unit)}
+                    </p>
+                    <p className="text-sm font-medium text-muted">{latest.targetPeriod}</p>
+                  </div>
+                ) : (
+                  <p className="mt-8 text-sm text-muted">Actual pending.</p>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <SectionLabel>Institution Spotlight</SectionLabel>
+          <h2
+            className="text-3xl leading-tight tracking-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Who is already in the record?
+          </h2>
+          <p className="mt-4 text-base leading-7 text-muted">
+            Farfield starts with public institutions so the trust layer exists before
+            independent forecasters and marketplace features arrive.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {spotlight.map((institution) => {
+            const forecastCount = Number(institution.forecastCount);
+            const scoredCount = Number(institution.scoredCount);
+            const variableCount = Number(institution.variableCount);
+            const countryCount = Number(institution.countryCount);
+            return (
+              <Link
+                key={institution.id}
+                href={`/forecasters/${institution.slug}`}
+                className="card px-5 py-4 transition-colors hover:border-accent"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-base font-semibold text-ink">{institution.name}</h3>
+                  <span className="rounded-full bg-accent-light px-3 py-1 text-xs font-semibold text-accent">
+                    {statusLabel(scoredCount, forecastCount)}
+                  </span>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="font-mono text-xl font-bold text-ink tabular-nums">
+                      {forecastCount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted">Forecasts</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-xl font-bold text-ink tabular-nums">
+                      {variableCount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted">Variables</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-xl font-bold text-ink tabular-nums">
+                      {countryCount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted">Geos</p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Card padding="lg" className="border-l-4 border-l-accent">
+          <SectionLabel>Methodology</SectionLabel>
+          <h2
+            className="text-3xl leading-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Built around exact source links
+          </h2>
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            {[
+              ["1", "Forecast vintages are preserved."],
+              ["2", "Actual releases stay linked to source documents."],
+              ["3", "Scores record the methodology version used."],
+            ].map(([step, text]) => (
+              <div key={step}>
+                <p className="font-mono text-2xl font-bold text-accent">{step}</p>
+                <p className="mt-2 text-sm leading-6 text-muted">{text}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card padding="lg" className="bg-bg">
+          <SectionLabel>Subscriber Layer</SectionLabel>
+          <h2
+            className="text-3xl leading-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Locked premium modules
+          </h2>
+          <div className="mt-6 grid gap-3">
+            {[
+              "Current consensus values",
+              "Vintage history and revision paths",
+              "Forecaster-by-forecaster series",
+              "Dispersion, rankings, and exports",
+            ].map((item) => (
+              <div key={item} className="flex items-center justify-between border-b border-border pb-3">
+                <span className="text-sm font-medium text-ink">{item}</span>
+                <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-muted">
+                  Locked
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
       </section>
     </div>
   );
