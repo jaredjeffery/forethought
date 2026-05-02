@@ -18,8 +18,16 @@
 // Run with: npx tsx --env-file=.env.local scripts/ingest-ecb-mpd.ts
 
 import { db } from "../db";
-import { forecasters, variables, forecasts } from "../db/schema";
-import { eq, and } from "drizzle-orm";
+import { forecasters, variables, forecasts, variableSourceMappings } from "../db/schema";
+import { eq, and, sql } from "drizzle-orm";
+import {
+  finishIngestionRun,
+  hashTextParts,
+  serializeIngestionError,
+  startIngestionRun,
+  upsertSourceDocument,
+  upsertVariableSourceMappings,
+} from "./provenance";
 
 // ---------------------------------------------------------------------------
 // Vintage definitions (2015 onwards by default; ECB archive goes back to 2001)
@@ -59,6 +67,8 @@ const ITEM_TO_VARIABLE: Record<string, string> = {
 
 const ITEMS_PARAM = Object.keys(ITEM_TO_VARIABLE).join("+");
 const ECB_API_BASE = "https://data-api.ecb.europa.eu/service/data";
+const ECB_SOURCE_NAME = "ECB-MPD";
+const ECB_PUBLICATION_NAME = "ECB Macroeconomic Projection Database";
 const SOURCE_URL = "https://www.ecb.europa.eu/pub/projections/html/index.en.html";
 
 // ---------------------------------------------------------------------------
@@ -107,6 +117,7 @@ function parseCsv(text: string): EcbRow[] {
 
 export async function ingestEcbMpdVintage(vintage: EcbMpdVintage): Promise<{
   forecasts_inserted: number;
+  forecasts_updated: number;
   skipped_no_variable: number;
 }> {
   console.log(`\nIngesting ECB MPD ${vintage.label}...`);
@@ -132,18 +143,57 @@ export async function ingestEcbMpdVintage(vintage: EcbMpdVintage): Promise<{
 
   // 3. Fetch from ECB SDW
   const url = `${ECB_API_BASE}/MPD/A.U2.${ITEMS_PARAM}..${vintage.code}.0000?format=csvdata`;
+  const sourceDocumentId = await upsertSourceDocument({
+    sourceName: ECB_SOURCE_NAME,
+    publicationName: ECB_PUBLICATION_NAME,
+    publicationDate: vintage.publication_date,
+    vintageLabel: vintage.label,
+    sourceUrl: SOURCE_URL,
+    storageUrl: url,
+  });
+  const ingestionRunId = await startIngestionRun({
+    sourceDocumentId,
+    sourceName: ECB_SOURCE_NAME,
+  });
+
   const resp = await fetch(url);
   if (!resp.ok) {
     console.warn(`  HTTP ${resp.status} — skipping ${vintage.label}`);
-    return { forecasts_inserted: 0, skipped_no_variable: 0 };
+    await finishIngestionRun({
+      ingestionRunId,
+      status: "skipped",
+      recordsSkipped: 0,
+      errors: { status: resp.status, statusText: resp.statusText },
+    });
+    return { forecasts_inserted: 0, forecasts_updated: 0, skipped_no_variable: 0 };
   }
   const text = await resp.text();
-  const rows = parseCsv(text);
+  await upsertSourceDocument({
+    sourceName: ECB_SOURCE_NAME,
+    publicationName: ECB_PUBLICATION_NAME,
+    publicationDate: vintage.publication_date,
+    vintageLabel: vintage.label,
+    sourceUrl: SOURCE_URL,
+    storageUrl: url,
+    fileHash: hashTextParts([text]),
+  });
+  let rows: EcbRow[];
+  try {
+    rows = parseCsv(text);
+  } catch (error) {
+    await finishIngestionRun({
+      ingestionRunId,
+      status: "failed",
+      errors: serializeIngestionError(error),
+    });
+    throw error;
+  }
   console.log(`  Received ${rows.length} data points`);
 
   // 4. Build forecast rows (OBS_STATUS = F only)
   const pubDate = new Date(vintage.publication_date);
   const forecastRows: (typeof forecasts.$inferInsert)[] = [];
+  const mappingRows = new Map<string, typeof variableSourceMappings.$inferInsert>();
   let skippedNoVariable = 0;
 
   for (const row of rows) {
@@ -155,6 +205,15 @@ export async function ingestEcbMpdVintage(vintage: EcbMpdVintage): Promise<{
     const variableId = variableByName.get(variableName);
     if (!variableId) { skippedNoVariable++; continue; }
 
+    mappingRows.set(`${row.pdItem}:${variableId}`, {
+      sourceName: ECB_SOURCE_NAME,
+      sourceVariableCode: row.pdItem,
+      sourceVariableName: variableName,
+      farfieldVariableId: variableId,
+      unitTransform: "identity",
+      notes: "ECB MPD annual euro area projection item mapped to Farfield macro variable.",
+    });
+
     forecastRows.push({
       forecasterId: ecb.id,
       variableId,
@@ -164,21 +223,68 @@ export async function ingestEcbMpdVintage(vintage: EcbMpdVintage): Promise<{
       forecastMadeAt: pubDate,
       vintage: vintage.label,
       sourceUrl: SOURCE_URL,
+      sourceDocumentId,
     });
   }
 
-  // 5. Batch insert, skip duplicates
-  let inserted = 0;
+  await upsertVariableSourceMappings(Array.from(mappingRows.values()));
+
+  const existingForecasts = await db
+    .select({
+      variableId: forecasts.variableId,
+      targetPeriod: forecasts.targetPeriod,
+      vintage: forecasts.vintage,
+    })
+    .from(forecasts)
+    .where(eq(forecasts.forecasterId, ecb.id));
+
+  const existingKeys = new Set(
+    existingForecasts.map(
+      (row) => `${row.variableId}|${row.targetPeriod}|${row.vintage}`,
+    ),
+  );
+  const createdCount = forecastRows.filter(
+    (row) => !existingKeys.has(`${row.variableId}|${row.targetPeriod}|${row.vintage}`),
+  ).length;
+  const updatedCount = forecastRows.length - createdCount;
+
+  // 5. Batch upsert so provenance is refreshed for previously imported vintages.
   const BATCH = 500;
   for (let i = 0; i < forecastRows.length; i += BATCH) {
-    const result = await db
+    await db
       .insert(forecasts)
       .values(forecastRows.slice(i, i + BATCH))
-      .onConflictDoNothing()
-      .returning({ id: forecasts.id });
-    inserted += result.length;
+      .onConflictDoUpdate({
+        target: [
+          forecasts.forecasterId,
+          forecasts.variableId,
+          forecasts.targetPeriod,
+          forecasts.vintage,
+        ],
+        set: {
+          value: sql`excluded.value`,
+          submittedAt: sql`excluded.submitted_at`,
+          forecastMadeAt: sql`excluded.forecast_made_at`,
+          sourceUrl: sql`excluded.source_url`,
+          sourceDocumentId: sql`excluded.source_document_id`,
+        },
+      });
   }
 
-  console.log(`  Inserted: ${inserted}  |  Skipped (no variable): ${skippedNoVariable}`);
-  return { forecasts_inserted: inserted, skipped_no_variable: skippedNoVariable };
+  await finishIngestionRun({
+    ingestionRunId,
+    status: "success",
+    recordsCreated: createdCount,
+    recordsUpdated: updatedCount,
+    recordsSkipped: skippedNoVariable,
+  });
+
+  console.log(
+    `  Inserted: ${createdCount}  |  Updated: ${updatedCount}  |  Skipped (no variable): ${skippedNoVariable}`,
+  );
+  return {
+    forecasts_inserted: createdCount,
+    forecasts_updated: updatedCount,
+    skipped_no_variable: skippedNoVariable,
+  };
 }

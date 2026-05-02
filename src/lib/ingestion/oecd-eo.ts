@@ -18,8 +18,16 @@
 
 import { execSync } from "child_process";
 import { db } from "../db";
-import { forecasters, variables, forecasts } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { forecasters, variables, forecasts, variableSourceMappings } from "../db/schema";
+import { eq, sql } from "drizzle-orm";
+import {
+  finishIngestionRun,
+  hashTextParts,
+  serializeIngestionError,
+  startIngestionRun,
+  upsertSourceDocument,
+  upsertVariableSourceMappings,
+} from "./provenance";
 
 // ---------------------------------------------------------------------------
 // Vintage definitions
@@ -86,6 +94,9 @@ const CPI_VARIABLE_NAME = "Inflation (CPI)";
 
 const ALL_MEASURES = [...Object.keys(MEASURE_TO_VARIABLE), CPI_MEASURE];
 const SDMX_BASE = "https://sdmx.oecd.org/public/rest/data";
+const OECD_SOURCE_NAME = "OECD-EO";
+const OECD_PUBLICATION_NAME = "OECD Economic Outlook";
+const OECD_PUBLICATION_URL = "https://www.oecd.org/en/publications/oecd-economic-outlook_16097408.html";
 
 // ---------------------------------------------------------------------------
 // SDMX CSV parser (minimal — handles the simple OECD csvfile format)
@@ -134,7 +145,7 @@ function parseCsv(text: string): OecdRow[] {
 async function fetchEdition(
   vintage: OecdEoVintage,
   oecdCountryCodes: string[],
-): Promise<OecdRow[]> {
+): Promise<{ rows: OecdRow[]; sourceUrls: string[]; responseHash: string }> {
   const measuresParam = ALL_MEASURES.join("+");
   const startPeriod   = vintage.year - 1;
   const endPeriod     = vintage.year + 3;
@@ -142,11 +153,14 @@ async function fetchEdition(
   // OECD API returns 500 for large country lists — batch into groups of 5
   const COUNTRY_BATCH = 5;
   const allRows: OecdRow[] = [];
+  const sourceUrls: string[] = [];
+  const responseParts: string[] = [];
 
   for (let i = 0; i < oecdCountryCodes.length; i += COUNTRY_BATCH) {
     const batch        = oecdCountryCodes.slice(i, i + COUNTRY_BATCH);
     const countriesParam = batch.join("+");
     const url = `${SDMX_BASE}/OECD.ECO.MAD,${vintage.dataflowId},1.0/${countriesParam}.${measuresParam}.A?startPeriod=${startPeriod}&endPeriod=${endPeriod}&format=csvfile`;
+    sourceUrls.push(url);
 
     // Node.js fetch is blocked by Cloudflare; use curl instead
     let text: string;
@@ -163,10 +177,15 @@ async function fetchEdition(
       console.warn(`  Batch [${batch.join(",")}] curl error — skipping. ${errorLike.message ?? String(err)}`);
       continue;
     }
+    responseParts.push(text);
     allRows.push(...parseCsv(text));
   }
 
-  return allRows;
+  return {
+    rows: allRows,
+    sourceUrls,
+    responseHash: hashTextParts(responseParts),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +194,7 @@ async function fetchEdition(
 
 export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
   forecasts_inserted: number;
+  forecasts_updated: number;
   skipped_no_variable: number;
 }> {
   console.log(`\nIngesting OECD EO ${vintage.label} (edition ${vintage.edition})...`);
@@ -209,9 +229,42 @@ export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
     if (oecdCode !== ourCode) oecdToOur.set(oecdCode, ourCode);
   }
 
+  const sourceDocumentId = await upsertSourceDocument({
+    sourceName: OECD_SOURCE_NAME,
+    publicationName: OECD_PUBLICATION_NAME,
+    publicationDate: vintage.publication_date,
+    vintageLabel: vintage.label,
+    sourceUrl: OECD_PUBLICATION_URL,
+  });
+  const ingestionRunId = await startIngestionRun({
+    sourceDocumentId,
+    sourceName: OECD_SOURCE_NAME,
+  });
+
   // 4. Fetch data from API
-  const rows = await fetchEdition(vintage, [...new Set(oecdCodes)]);
+  let fetched: Awaited<ReturnType<typeof fetchEdition>>;
+  try {
+    fetched = await fetchEdition(vintage, [...new Set(oecdCodes)]);
+  } catch (error) {
+    await finishIngestionRun({
+      ingestionRunId,
+      status: "failed",
+      errors: serializeIngestionError(error),
+    });
+    throw error;
+  }
+  const rows = fetched.rows;
   console.log(`  Received ${rows.length} data points from OECD SDMX`);
+
+  await upsertSourceDocument({
+    sourceName: OECD_SOURCE_NAME,
+    publicationName: OECD_PUBLICATION_NAME,
+    publicationDate: vintage.publication_date,
+    vintageLabel: vintage.label,
+    sourceUrl: OECD_PUBLICATION_URL,
+    storageUrl: fetched.sourceUrls.join("\n"),
+    fileHash: fetched.responseHash,
+  });
 
   // 5. Group CPI by (country, year) for % change computation
   const cpiByCountryYear = new Map<string, number>(); // "AREA|YEAR" → level
@@ -223,6 +276,7 @@ export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
 
   const pubDate = new Date(vintage.publication_date);
   const forecastRows: (typeof forecasts.$inferInsert)[] = [];
+  const mappingRows = new Map<string, typeof variableSourceMappings.$inferInsert>();
   let skippedNoVariable = 0;
 
   // 6. Build forecast rows for direct-mapped measures
@@ -236,6 +290,14 @@ export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
     const ourCountry = oecdToOur.get(row.refArea) ?? row.refArea;
     const variableId = variableMap.get(`${variableName}|${ourCountry}`);
     if (!variableId) { skippedNoVariable++; continue; }
+    mappingRows.set(`${row.measure}|${variableId}`, {
+      sourceName: OECD_SOURCE_NAME,
+      sourceVariableCode: row.measure,
+      sourceVariableName: variableName,
+      farfieldVariableId: variableId,
+      unitTransform: "none",
+      notes: `OECD EO ${vintage.edition} annual forecast series`,
+    });
 
     forecastRows.push({
       forecasterId: oecd.id,
@@ -245,7 +307,8 @@ export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
       submittedAt: pubDate,
       forecastMadeAt: pubDate,
       vintage: vintage.label,
-      sourceUrl: "https://www.oecd.org/en/publications/oecd-economic-outlook_16097408.html",
+      sourceUrl: OECD_PUBLICATION_URL,
+      sourceDocumentId,
     });
   }
 
@@ -257,6 +320,14 @@ export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
     const ourCountry = oecdToOur.get(oecdArea) ?? oecdArea;
     const variableId = variableMap.get(`${CPI_VARIABLE_NAME}|${ourCountry}`);
     if (!variableId) { skippedNoVariable++; continue; }
+    mappingRows.set(`${CPI_MEASURE}|${variableId}`, {
+      sourceName: OECD_SOURCE_NAME,
+      sourceVariableCode: CPI_MEASURE,
+      sourceVariableName: CPI_VARIABLE_NAME,
+      farfieldVariableId: variableId,
+      unitTransform: "percent_change_from_index_level",
+      notes: `OECD EO ${vintage.edition} CPI level converted to annual percent change`,
+    });
 
     for (let year = vintage.year; year <= vintage.year + 3; year++) {
       const current = cpiByCountryYear.get(`${oecdArea}|${year}`);
@@ -273,23 +344,68 @@ export async function ingestOecdEoVintage(vintage: OecdEoVintage): Promise<{
         submittedAt: pubDate,
         forecastMadeAt: pubDate,
         vintage: vintage.label,
-        sourceUrl: "https://www.oecd.org/en/publications/oecd-economic-outlook_16097408.html",
+        sourceUrl: OECD_PUBLICATION_URL,
+        sourceDocumentId,
       });
     }
   }
 
-  // 8. Batch insert (500 at a time), skip duplicates
-  let inserted = 0;
+  await upsertVariableSourceMappings(Array.from(mappingRows.values()));
+
+  const existingForecasts = await db
+    .select({
+      variableId: forecasts.variableId,
+      targetPeriod: forecasts.targetPeriod,
+      vintage: forecasts.vintage,
+    })
+    .from(forecasts)
+    .where(eq(forecasts.forecasterId, oecd.id));
+  const existingKeys = new Set(
+    existingForecasts.map((row) => `${row.variableId}|${row.targetPeriod}|${row.vintage}`),
+  );
+  const createdCount = forecastRows.filter(
+    (row) => !existingKeys.has(`${row.variableId}|${row.targetPeriod}|${row.vintage}`),
+  ).length;
+  const updatedCount = forecastRows.length - createdCount;
+
+  // 8. Batch upsert (500 at a time), refreshing provenance on existing rows
   const BATCH = 500;
   for (let i = 0; i < forecastRows.length; i += BATCH) {
-    const result = await db
+    const batch = forecastRows.slice(i, i + BATCH);
+    await db
       .insert(forecasts)
-      .values(forecastRows.slice(i, i + BATCH))
-      .onConflictDoNothing()
-      .returning({ id: forecasts.id });
-    inserted += result.length;
+      .values(batch)
+      .onConflictDoUpdate({
+        target: [
+          forecasts.forecasterId,
+          forecasts.variableId,
+          forecasts.targetPeriod,
+          forecasts.vintage,
+        ],
+        set: {
+          value: sql`excluded.value`,
+          submittedAt: sql`excluded.submitted_at`,
+          forecastMadeAt: sql`excluded.forecast_made_at`,
+          sourceUrl: sql`excluded.source_url`,
+          sourceDocumentId: sql`excluded.source_document_id`,
+        },
+      });
   }
 
-  console.log(`  Inserted: ${inserted}  |  Skipped (no variable): ${skippedNoVariable}`);
-  return { forecasts_inserted: inserted, skipped_no_variable: skippedNoVariable };
+  await finishIngestionRun({
+    ingestionRunId,
+    status: "success",
+    recordsCreated: createdCount,
+    recordsUpdated: updatedCount,
+    recordsSkipped: skippedNoVariable,
+  });
+
+  console.log(
+    `  Created: ${createdCount}  |  Updated: ${updatedCount}  |  Skipped (no variable): ${skippedNoVariable}`,
+  );
+  return {
+    forecasts_inserted: createdCount,
+    forecasts_updated: updatedCount,
+    skipped_no_variable: skippedNoVariable,
+  };
 }
