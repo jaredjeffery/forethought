@@ -179,6 +179,20 @@ async function main() {
     );
     assertNoSampleValues("public forecaster page sample values", forecasterHtml, premiumSampleValues);
 
+    const landingResponse = await fetch(baseUrl);
+    const landingHtml = await landingResponse.text();
+    check(
+      "public landing page status",
+      landingResponse.status === 200,
+      `Expected 200, got ${landingResponse.status}`,
+    );
+    assertNoSampleValues("public landing page sample values", landingHtml, premiumSampleValues);
+    check(
+      "public landing page avoids accuracy leaderboard",
+      !landingHtml.includes("Accuracy Leaderboard") && !landingHtml.includes("MAE"),
+      "Accuracy leaderboard terms found in public landing HTML",
+    );
+
     const variableResponse = await fetch(`${baseUrl}/api/variables/${sampleForecast.variableId}`);
     check("public variable API status", variableResponse.status === 200, `Expected 200, got ${variableResponse.status}`);
 
