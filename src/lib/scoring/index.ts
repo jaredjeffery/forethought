@@ -22,7 +22,32 @@
 
 import { db } from "../db";
 import { forecasts, actuals, consensusForecasts, forecastScores } from "../db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, isNull, sql, desc } from "drizzle-orm";
+
+const ACTUAL_SOURCE_PRIORITY = sql`
+  CASE
+    WHEN ${actuals.source} = 'IMF-WEO' THEN 0
+    WHEN ${actuals.source} LIKE 'World Bank%' THEN 2
+    ELSE 1
+  END
+`;
+
+function actualSourceRank(source: string): number {
+  if (source === "IMF-WEO") return 0;
+  if (source.startsWith("World Bank")) return 2;
+  return 1;
+}
+
+function shouldReplaceActual(
+  current: { source: string; publishedAt: Date } | undefined,
+  candidate: { source: string; publishedAt: Date },
+): boolean {
+  if (!current) return true;
+  const currentRank = actualSourceRank(current.source);
+  const candidateRank = actualSourceRank(candidate.source);
+  if (candidateRank !== currentRank) return candidateRank < currentRank;
+  return candidate.publishedAt < current.publishedAt;
+}
 
 // ---------------------------------------------------------------------------
 // Metric functions — pure, no DB access
@@ -128,6 +153,7 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
         eq(actuals.releaseNumber, 1)
       )
     )
+    .orderBy(ACTUAL_SOURCE_PRIORITY, actuals.publishedAt)
     .limit(1);
 
   if (!actual) return false; // no first-release actual yet; skip
@@ -152,6 +178,7 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
           eq(actuals.releaseNumber, 1)
         )
       )
+      .orderBy(ACTUAL_SOURCE_PRIORITY, actuals.publishedAt)
       .limit(1);
     priorActual = priorActualRow ? parseFloat(priorActualRow.value) : null;
   }
@@ -166,6 +193,7 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
         eq(consensusForecasts.targetPeriod, forecast.targetPeriod)
       )
     )
+    .orderBy(desc(consensusForecasts.asOfDate), desc(consensusForecasts.computedAt))
     .limit(1);
   const consensusValue = consensus ? parseFloat(consensus.simpleMean) : null;
 
@@ -252,43 +280,49 @@ export async function scoreAllPending(): Promise<{ scored: number; skipped: numb
 // ---------------------------------------------------------------------------
 
 export async function rescoreAll(): Promise<{ scored: number; skipped: number }> {
-  // 1. All (forecast, actual) pairs in one JOIN
-  const pairs = await db
+  // 1. All forecasts, matched in memory against the preferred first-release actual.
+  // Prefer WEO-carried/national-authority actuals over legacy World Bank rows.
+  const allForecasts = await db
     .select({
       forecastId: forecasts.id,
       variableId: forecasts.variableId,
       targetPeriod: forecasts.targetPeriod,
       forecastValue: forecasts.value,
       forecastMadeAt: forecasts.forecastMadeAt,
-      actualId: actuals.id,
-      actualValue: actuals.value,
     })
-    .from(forecasts)
-    .innerJoin(
-      actuals,
-      and(
-        eq(actuals.variableId, forecasts.variableId),
-        eq(actuals.targetPeriod, forecasts.targetPeriod),
-        eq(actuals.releaseNumber, 1)
-      )
-    );
-
-  if (pairs.length === 0) return { scored: 0, skipped: 0 };
+    .from(forecasts);
 
   // 2. All first-release actuals (for prior-year directional accuracy lookups)
   const allActuals = await db
-    .select({ variableId: actuals.variableId, targetPeriod: actuals.targetPeriod, value: actuals.value })
+    .select({
+      id: actuals.id,
+      variableId: actuals.variableId,
+      targetPeriod: actuals.targetPeriod,
+      value: actuals.value,
+      source: actuals.source,
+      publishedAt: actuals.publishedAt,
+    })
     .from(actuals)
     .where(eq(actuals.releaseNumber, 1));
-  const actualByKey = new Map<string, number>();
+  const actualByKey = new Map<string, { id: string; value: number; source: string; publishedAt: Date }>();
   for (const a of allActuals) {
-    actualByKey.set(`${a.variableId}|${a.targetPeriod}`, parseFloat(a.value));
+    const key = `${a.variableId}|${a.targetPeriod}`;
+    const candidate = {
+      id: a.id,
+      value: parseFloat(a.value),
+      source: a.source,
+      publishedAt: a.publishedAt,
+    };
+    if (shouldReplaceActual(actualByKey.get(key), candidate)) {
+      actualByKey.set(key, candidate);
+    }
   }
 
   // 3. All consensus forecasts
   const allConsensus = await db
     .select({ variableId: consensusForecasts.variableId, targetPeriod: consensusForecasts.targetPeriod, simpleMean: consensusForecasts.simpleMean })
-    .from(consensusForecasts);
+    .from(consensusForecasts)
+    .orderBy(consensusForecasts.variableId, consensusForecasts.targetPeriod, consensusForecasts.asOfDate);
   const consensusByKey = new Map<string, number>();
   for (const c of allConsensus) {
     consensusByKey.set(`${c.variableId}|${c.targetPeriod}`, parseFloat(c.simpleMean));
@@ -296,13 +330,16 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
 
   // 4. Compute scores in memory
   const scoreRows: (typeof forecastScores.$inferInsert)[] = [];
-  for (const p of pairs) {
+  for (const p of allForecasts) {
+    const actual = actualByKey.get(`${p.variableId}|${p.targetPeriod}`);
+    if (!actual) continue;
+
     const fv = parseFloat(p.forecastValue);
-    const av = parseFloat(p.actualValue);
+    const av = actual.value;
 
     const isAnnual = /^\d{4}$/.test(p.targetPeriod);
     const priorActual = isAnnual
-      ? (actualByKey.get(`${p.variableId}|${String(parseInt(p.targetPeriod, 10) - 1)}`) ?? null)
+      ? (actualByKey.get(`${p.variableId}|${String(parseInt(p.targetPeriod, 10) - 1)}`)?.value ?? null)
       : null;
     const consensusValue = consensusByKey.get(`${p.variableId}|${p.targetPeriod}`) ?? null;
 
@@ -315,7 +352,7 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
 
     scoreRows.push({
       forecastId: p.forecastId,
-      actualId: p.actualId,
+      actualId: actual.id,
       methodologyVersion: "v1.0",
       absoluteError:    isNaN(absoluteError)    ? null : String(absoluteError),
       percentageError:  isNaN(percentageError)  ? null : String(percentageError),
@@ -348,5 +385,5 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
       });
   }
 
-  return { scored: scoreRows.length, skipped: 0 };
+  return { scored: scoreRows.length, skipped: allForecasts.length - scoreRows.length };
 }

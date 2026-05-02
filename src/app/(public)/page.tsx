@@ -1,275 +1,744 @@
-// Landing page — public showcase entry point.
-// Two-column hero: headline/CTAs left, live forecaster leaderboard right.
-// NOTE: this is a data-led placeholder until the news/events layout ships.
+// Public homepage for Farfield with non-leaky editorial, actuals, and trust signals.
 
 import { db } from "@/lib/db";
-import { variables, actuals, forecasters, forecasts, forecastScores } from "@/lib/db/schema";
-import { eq, desc, inArray, and, avg, count, isNotNull } from "drizzle-orm";
+import {
+  actuals,
+  forecasters,
+  forecasts,
+  forecastScores,
+  sourceDocuments,
+  variables,
+} from "@/lib/db/schema";
+import { countDistinct, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { articles, methodologyNotes } from "@/lib/content";
+import { ArticleVisual } from "@/components/ArticleVisual";
+import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
-async function getFeaturedData() {
-  const gdpVars = await db
+const COUNTRY_LABELS: Record<string, string> = {
+  WLD: "World",
+  USA: "United States",
+  CHN: "China",
+  GBR: "United Kingdom",
+  ZAF: "South Africa",
+  IND: "India",
+  EA: "Euro Area",
+  G7: "G7",
+};
+
+const FEATURED_VARIABLES = [
+  { name: "GDP Growth Rate", countryCode: "WLD" },
+  { name: "GDP Growth Rate", countryCode: "USA" },
+  { name: "GDP Growth Rate", countryCode: "CHN" },
+  { name: "Inflation (CPI)", countryCode: "GBR" },
+  { name: "Unemployment Rate", countryCode: "ZAF" },
+  { name: "Current Account Balance", countryCode: "IND" },
+];
+
+const SUBSCRIBER_CAROUSEL_PREVIEW = [
+  {
+    variable: "United States GDP Growth Rate",
+    target: "2026",
+    signal: "Consensus path",
+    detail: "Institution forecasts, consensus, dispersion, and vintage changes stay locked.",
+  },
+  {
+    variable: "United Kingdom Inflation (CPI)",
+    target: "2026",
+    signal: "Forecaster spread",
+    detail: "Subscriber view compares public institutions against the current consensus.",
+  },
+  {
+    variable: "South Africa Unemployment Rate",
+    target: "2026",
+    signal: "Vintage movement",
+    detail: "As-of snapshots show how the record changes from one source release to the next.",
+  },
+];
+
+async function getHomepageData() {
+  const allVariables = await db
     .select()
     .from(variables)
-    .where(
-      and(
-        eq(variables.name, "GDP Growth Rate"),
-        inArray(variables.countryCode, ["WLD", "USA", "CHN", "GBR", "ZAF"])
-      )
-    )
+    .where(eq(variables.category, "MACRO"))
     .orderBy(variables.countryCode, variables.name);
 
-  const gdpActuals = gdpVars.length > 0
+  const featuredVariables = FEATURED_VARIABLES
+    .map((target) =>
+      allVariables.find(
+        (variable) =>
+          variable.name === target.name &&
+          variable.countryCode === target.countryCode,
+      ),
+    )
+    .filter((variable): variable is NonNullable<typeof variable> => Boolean(variable));
+
+  const featuredActuals = featuredVariables.length > 0
     ? await db
         .select()
         .from(actuals)
-        .where(inArray(actuals.variableId, gdpVars.map((v) => v.id)))
-        .orderBy(desc(actuals.targetPeriod))
+        .where(inArray(actuals.variableId, featuredVariables.map((variable) => variable.id)))
+        .orderBy(desc(actuals.targetPeriod), desc(actuals.publishedAt))
     : [];
 
   const institutions = await db
-    .select()
-    .from(forecasters)
-    .where(eq(forecasters.type, "INSTITUTION"))
-    .orderBy(forecasters.name);
-
-  // Leaderboard: institutions ranked by avg absolute error (scored forecasts only)
-  const leaderboard = await db
     .select({
       id: forecasters.id,
       name: forecasters.name,
       slug: forecasters.slug,
-      forecastCount: count(forecasts.id),
-      avgError: avg(forecastScores.absoluteError),
+      forecastCount: countDistinct(forecasts.id),
+      scoredCount: countDistinct(forecastScores.id),
+      variableCount: countDistinct(forecasts.variableId),
+      countryCount: countDistinct(variables.countryCode),
     })
     .from(forecasters)
-    .innerJoin(forecasts, eq(forecasts.forecasterId, forecasters.id))
-    .innerJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-    .where(and(
-      eq(forecasters.type, "INSTITUTION"),
-      isNotNull(forecastScores.absoluteError),
-    ))
+    .leftJoin(forecasts, eq(forecasts.forecasterId, forecasters.id))
+    .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
+    .leftJoin(variables, eq(variables.id, forecasts.variableId))
+    .where(eq(forecasters.type, "INSTITUTION"))
     .groupBy(forecasters.id, forecasters.name, forecasters.slug)
-    .orderBy(avg(forecastScores.absoluteError))
-    .limit(6);
+    .orderBy(desc(countDistinct(forecasts.id)), forecasters.name)
+    .limit(8);
 
-  return { gdpVars, gdpActuals, institutions, leaderboard };
+  const sourceRows = await db.select().from(sourceDocuments);
+  const sourceCount = new Set(sourceRows.map((row) => row.sourceName)).size;
+  const latestSource = sourceRows
+    .slice()
+    .sort((a, b) => b.ingestedAt.getTime() - a.ingestedAt.getTime())
+    .at(0);
+
+  return {
+    featuredVariables,
+    featuredActuals,
+    institutions,
+    sourceCount,
+    latestSource,
+  };
 }
 
-const COUNTRY_LABELS: Record<string, string> = {
-  WLD: "World", USA: "US", CHN: "China", GBR: "UK", ZAF: "S. Africa",
-};
+function statusLabel(scoredCount: number, forecastCount: number) {
+  if (scoredCount >= 100) return "Ranked benchmark";
+  if (scoredCount > 0) return "Building track record";
+  if (forecastCount > 0) return "Tracked, awaiting scores";
+  return "No tracked forecasts";
+}
+
+function formatActual(value: string, unit: string) {
+  const parsed = parseFloat(value);
+  const suffix = unit.includes("%") ? "%" : "";
+  return `${parsed > 0 ? "+" : ""}${parsed.toFixed(1)}${suffix}`;
+}
 
 export default async function LandingPage() {
-  const { gdpVars, gdpActuals, institutions, leaderboard } = await getFeaturedData();
+  const {
+    featuredVariables,
+    featuredActuals,
+    institutions,
+    sourceCount,
+    latestSource,
+  } = await getHomepageData();
 
-  const latestActuals = new Map<string, { value: string; period: string }>();
-  for (const a of gdpActuals) {
-    if (!latestActuals.has(a.variableId)) {
-      latestActuals.set(a.variableId, {
-        value: parseFloat(a.value).toFixed(1),
-        period: a.targetPeriod,
-      });
+  const latestActuals = new Map<string, typeof featuredActuals[number]>();
+  for (const actual of featuredActuals) {
+    if (!latestActuals.has(actual.variableId)) {
+      latestActuals.set(actual.variableId, actual);
     }
   }
 
+  const totalTracked = institutions.reduce(
+    (sum, row) => sum + Number(row.forecastCount),
+    0,
+  );
+  const totalScored = institutions.reduce(
+    (sum, row) => sum + Number(row.scoredCount),
+    0,
+  );
+
+  const spotlight = institutions.slice(0, 4);
+  const leadArticle = articles.find((article) => article.prominence === "lead") ?? articles[0];
+  const topArticles = articles
+    .filter(
+      (article) =>
+        article.prominence === "top" && article.column !== "Forecaster Spotlight",
+    )
+    .slice(0, 3);
+  const leadingIndicators = articles
+    .filter((article) => article.column === "Leading Indicators")
+    .slice(0, 3);
+  const forecasterSpotlight = articles.find(
+    (article) => article.column === "Forecaster Spotlight",
+  );
+  const blogArticles = articles
+    .filter((article) => article.column === "Farfield Blog")
+    .slice(0, 4);
+  const chartVariable =
+    featuredVariables.find(
+      (variable) =>
+        variable.name === "GDP Growth Rate" && variable.countryCode === "WLD",
+    ) ?? featuredVariables[0];
+  const chartActuals = chartVariable
+    ? featuredActuals.filter((actual) => actual.variableId === chartVariable.id)
+    : [];
+  const chartActualByPeriod = new Map<string, typeof chartActuals[number]>();
+
+  for (const actual of chartActuals) {
+    if (!chartActualByPeriod.has(actual.targetPeriod)) {
+      chartActualByPeriod.set(actual.targetPeriod, actual);
+    }
+  }
+
+  const chartData: DataPoint[] = Array.from(chartActualByPeriod.values())
+    .sort((a, b) => a.targetPeriod.localeCompare(b.targetPeriod))
+    .slice(-18)
+    .map((actual) => ({
+      period: actual.targetPeriod,
+      actual: parseFloat(actual.value),
+    }));
+  const latestChartActual = chartData.at(-1);
+  const latestChartValue =
+    typeof latestChartActual?.actual === "number" ? latestChartActual.actual : null;
+
   return (
     <div className="space-y-20">
-
-      {/* ── Two-column hero ───────────────────────────────────────── */}
-      <section className="pt-4 grid lg:grid-cols-[1fr_420px] gap-12 items-start">
-        {/* Left: headline + copy + CTAs */}
-        <div>
-          <h1
-            className="text-[64px] leading-[1.05] tracking-tight text-ink"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            Who calls it{" "}
-            <span className="text-accent">right?</span>
-          </h1>
-          <p className="mt-6 text-xl text-muted leading-relaxed max-w-lg">
-            Forethought tracks economic forecasts from institutions and
-            independent analysts, scores them against outcomes, and publishes
-            the record — permanently.
-          </p>
-          <div className="mt-8 flex gap-3">
+      <section className="border-b border-border pb-10 pt-2">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-accent">
+              Forecast observatory
+            </p>
+            <h1
+              className="mt-2 text-5xl leading-none tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Farfield
+            </h1>
+            <p className="mt-3 max-w-2xl text-lg leading-7 text-muted">
+              Economic forecasting, public records, and analysis from the people trying to see what comes next.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/articles"
+              className="inline-flex items-center rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
+            >
+              Read analysis
+            </Link>
             <Link
               href="/variables"
-              className="inline-flex items-center px-6 py-3 text-base font-semibold bg-accent text-white rounded-[10px] hover:bg-accent-dark transition-colors duration-200"
-              style={{ boxShadow: "0 1px 3px rgba(29, 78, 216, 0.3)" }}
+              className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
             >
               Browse variables
             </Link>
             <Link
               href="/forecasters"
-              className="inline-flex items-center px-6 py-3 text-base font-semibold border-2 border-border text-ink rounded-[10px] hover:border-accent hover:text-accent transition-colors duration-200"
+              className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
             >
               View forecasters
             </Link>
           </div>
         </div>
 
-        {/* Right: live leaderboard card */}
-        {leaderboard.length > 0 && (
-          <Card raised padding="none" className="overflow-hidden">
-            <div className="px-5 pt-5 pb-3 border-b border-border">
-              <p className="text-xs font-bold tracking-widest text-accent uppercase">
-                Accuracy Leaderboard
-              </p>
-              <p className="text-xs text-muted mt-0.5">Ranked by avg. absolute error — lower is better</p>
-            </div>
-            <div className="divide-y divide-border">
-              {leaderboard.map((f, i) => (
-                <Link
-                  key={f.id}
-                  href={`/forecasters/${f.slug}`}
-                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-bg transition-colors group"
-                >
-                  <span
-                    className="text-sm font-bold tabular-nums text-muted w-5 shrink-0"
-                    style={{ fontFamily: "var(--font-mono)" }}
+        <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
+          <SectionLabel className="mb-0">Today in Farfield</SectionLabel>
+          <Link href="/articles" className="text-sm font-semibold text-accent hover:text-accent-dark">
+            All articles
+          </Link>
+        </div>
+
+        <div className="mt-4 grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+          {leadArticle && (
+            <Link href={`/articles/${leadArticle.slug}`} className="group">
+              <Card padding="none" raised className="h-full overflow-hidden transition-colors group-hover:border-accent">
+                <ArticleVisual article={leadArticle} size="lg" />
+                <div className="p-7">
+                  <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-widest text-muted">
+                    <span className="text-accent">{leadArticle.label}</span>
+                    <span>{leadArticle.tag}</span>
+                    <span>{leadArticle.readingTime}</span>
+                  </div>
+                  <h3
+                    className="mt-4 max-w-2xl text-4xl leading-tight tracking-tight text-ink group-hover:text-accent"
+                    style={{ fontFamily: "var(--font-display)" }}
                   >
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 text-sm font-semibold text-ink group-hover:text-accent transition-colors truncate">
-                    {f.name}
-                  </span>
-                  {f.avgError != null && (
-                    <span
-                      className="text-sm tabular-nums text-muted shrink-0"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    >
-                      {parseFloat(f.avgError).toFixed(2)} MAE
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
-            <div className="px-5 py-3 border-t border-border">
-              <Link
-                href="/forecasters"
-                className="text-xs font-semibold text-accent hover:text-accent-dark transition-colors"
-              >
-                View all forecasters →
-              </Link>
-            </div>
-          </Card>
-        )}
-      </section>
-
-      {/* ── GDP snapshot ─────────────────────────────────────────── */}
-      {gdpVars.length > 0 && (
-        <section>
-          <SectionLabel>GDP Growth — Latest Actuals</SectionLabel>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {gdpVars.map((v) => {
-              const latest = latestActuals.get(v.id);
-              const val = latest ? parseFloat(latest.value) : null;
-              const isPos = val !== null && val >= 0;
-              return (
-                <Link
-                  key={v.id}
-                  href={`/variables/${v.id}`}
-                  className="group card px-5 py-4 hover:border-accent transition-colors duration-200"
-                  style={{ borderRadius: "var(--radius-md)" }}
-                >
-                  <p className="text-xs font-bold tracking-wider text-muted uppercase">
-                    {COUNTRY_LABELS[v.countryCode] ?? v.countryCode}
+                    {leadArticle.title}
+                  </h3>
+                  <p className="mt-4 max-w-2xl text-base leading-7 text-muted">
+                    {leadArticle.dek}
                   </p>
-                  {latest && val !== null ? (
-                    <>
-                      <p
-                        className={`mt-2 text-2xl font-bold tabular-nums leading-none ${
-                          isPos ? "text-signal-green" : "text-signal-red"
-                        }`}
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {isPos && val !== 0 ? "+" : ""}{val.toFixed(1)}%
-                      </p>
-                      <p className="mt-2 text-xs text-muted">{latest.period}</p>
-                    </>
-                  ) : (
-                    <p className="mt-2 text-xl text-border-dark">—</p>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
+                </div>
+              </Card>
+            </Link>
+          )}
 
-      {/* ── Tracked institutions ─────────────────────────────────── */}
-      {institutions.length > 0 && (
-        <section>
-          <SectionLabel>Tracked Institutions</SectionLabel>
-          <Card padding="none">
-            {institutions.map((f, i) => (
-              <Link
-                key={f.id}
-                href={`/forecasters/${f.slug}`}
-                className={`flex items-center justify-between px-6 py-4 hover:bg-bg transition-colors group ${
-                  i < institutions.length - 1 ? "border-b border-border" : ""
-                }`}
-              >
-                <span className="text-base font-semibold text-ink group-hover:text-accent transition-colors">
-                  {f.name}
-                </span>
-                <span
-                  className="text-xs text-muted tabular-nums"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </span>
+          <div className="grid gap-4">
+            {topArticles.map((article) => (
+              <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+                <Card padding="none" className="grid overflow-hidden transition-colors group-hover:border-accent sm:grid-cols-[155px_1fr] lg:grid-cols-1 xl:grid-cols-[155px_1fr]">
+                  <ArticleVisual article={article} />
+                  <div className="p-5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                      {article.label}
+                    </p>
+                    <h3
+                      className="mt-3 text-xl leading-tight text-ink group-hover:text-accent"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {article.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-muted">{article.dek}</p>
+                  </div>
+                </Card>
               </Link>
             ))}
-          </Card>
-        </section>
-      )}
+          </div>
+        </div>
 
-      {/* ── How it works ─────────────────────────────────────────── */}
-      <section className="border-t border-border pt-14">
-        <SectionLabel>How It Works</SectionLabel>
-        <div className="grid sm:grid-cols-3 gap-8">
+        <div className="mt-6 grid gap-0 border-y border-border bg-surface sm:grid-cols-2 lg:grid-cols-4">
           {[
-            {
-              n: "01",
-              title: "Forecasts are logged",
-              body: "Institutions publish WEO-style projections. Independent analysts submit their own. Every forecast is timestamped and immutable.",
-            },
-            {
-              n: "02",
-              title: "Outcomes are scored",
-              body: "When official data is published, each forecast is scored: absolute error, directional accuracy, and performance vs the consensus.",
-            },
-            {
-              n: "03",
-              title: "Accuracy is public",
-              body: "Scores and rankings are visible to everyone. No cherry-picking. The methodology is versioned and documented.",
-            },
-          ].map((item) => (
-            <div key={item.n}>
-              <p
-                className="text-4xl font-bold text-accent-light mb-4 leading-none select-none"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                {item.n}
+            ["Tracked forecasts", totalTracked.toLocaleString()],
+            ["Scored rows", totalScored.toLocaleString()],
+            ["Source families", sourceCount.toLocaleString()],
+            ["Latest import", latestSource?.vintageLabel ?? "Pending"],
+          ].map(([label, value], index) => (
+            <div
+              key={label}
+              className={`px-4 py-3 ${index > 0 ? "border-t border-border sm:border-l sm:border-t-0" : ""}`}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                {label}
               </p>
-              <h3
-                className="text-lg font-semibold text-ink mb-2"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                {item.title}
-              </h3>
-              <p className="text-base text-muted leading-relaxed">{item.body}</p>
+              <p className="mt-1 font-mono text-lg font-bold leading-tight text-ink tabular-nums">
+                {value}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
+      <section className="grid gap-8 lg:grid-cols-[1fr_0.8fr]">
+        <div>
+          <div className="mb-5 flex items-end justify-between gap-3">
+            <div>
+              <SectionLabel className="mb-2">Leading Indicators</SectionLabel>
+              <h2
+                className="text-3xl tracking-tight text-ink"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Signals forecasters watch before the data lands
+              </h2>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {leadingIndicators.map((article) => (
+              <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+                <Card padding="none" className="h-full overflow-hidden transition-colors group-hover:border-accent">
+                  <ArticleVisual article={article} />
+                  <div className="p-5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                      {article.tag}
+                    </p>
+                    <h3
+                      className="mt-3 text-xl leading-tight text-ink group-hover:text-accent"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {article.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-muted">{article.dek}</p>
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {forecasterSpotlight && (
+          <div>
+            <SectionLabel className="mb-5">Forecaster Spotlight</SectionLabel>
+            <Link href={`/articles/${forecasterSpotlight.slug}`} className="group">
+              <Card padding="none" raised className="h-full overflow-hidden transition-colors group-hover:border-accent">
+                <ArticleVisual article={forecasterSpotlight} size="lg" />
+                <div className="p-6">
+                  <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                    Regular profile
+                  </p>
+                  <h3
+                    className="mt-3 text-3xl leading-tight text-ink group-hover:text-accent"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {forecasterSpotlight.title}
+                  </h3>
+                  <p className="mt-4 text-sm leading-6 text-muted">
+                    {forecasterSpotlight.dek}
+                  </p>
+                </div>
+              </Card>
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Farfield Blog</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Notes from the data room
+            </h2>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {blogArticles.map((article) => (
+            <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+              <Card padding="md" className="h-full transition-colors group-hover:border-accent">
+                <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                  {article.tag}
+                </p>
+                <h3
+                  className="mt-4 text-lg leading-tight text-ink group-hover:text-accent"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {article.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-muted">{article.dek}</p>
+                <p className="mt-6 text-xs font-semibold uppercase tracking-widest text-border-dark">
+                  {article.readingTime}
+                </p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {chartVariable && chartData.length > 0 && (
+        <section className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-stretch">
+          <Card padding="none" raised className="overflow-hidden">
+            <div className="border-b border-border px-6 py-5">
+              <SectionLabel className="mb-2">Public Data Visual</SectionLabel>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2
+                    className="text-3xl tracking-tight text-ink"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {COUNTRY_LABELS[chartVariable.countryCode] ?? chartVariable.countryCode}{" "}
+                    {chartVariable.name}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    Actual outcomes only. Forecast and consensus lines stay locked.
+                  </p>
+                </div>
+                <Link
+                  href={`/variables/${chartVariable.slug}`}
+                  className="text-sm font-semibold text-accent hover:text-accent-dark"
+                >
+                  Open variable
+                </Link>
+              </div>
+            </div>
+            <div className="px-3 py-5">
+              <ForecastChart
+                data={chartData}
+                series={[]}
+                unit={chartVariable.unit}
+                height={360}
+              />
+            </div>
+          </Card>
+
+          <Card padding="lg" className="flex flex-col justify-between border-l-4 border-l-signal-green">
+            <div>
+              <SectionLabel>Latest Actual</SectionLabel>
+              <p className="font-mono text-5xl font-bold leading-none text-ink tabular-nums">
+                {latestChartValue !== null
+                  ? `${latestChartValue > 0 ? "+" : ""}${latestChartValue.toFixed(1)}${
+                      chartVariable.unit.includes("%") ? "%" : ""
+                    }`
+                  : "Pending"}
+              </p>
+              <p className="mt-2 text-sm font-medium text-muted">
+                {latestChartActual?.period ?? "No period"} / {chartVariable.unit}
+              </p>
+            </div>
+            <div className="mt-8 grid gap-3 text-sm">
+              <div className="border-t border-border pt-3">
+                <p className="font-semibold text-ink">Public view</p>
+                <p className="mt-1 leading-6 text-muted">
+                  Actual history, source labels, and coverage indicators.
+                </p>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="font-semibold text-ink">Subscriber view</p>
+                <p className="mt-1 leading-6 text-muted">
+                  Forecast paths, consensus as-of history, dispersion, and exports.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </section>
+      )}
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Subscriber Preview</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Forecasts compared with consensus
+            </h2>
+          </div>
+          <Link
+            href="/pricing"
+            className="text-sm font-semibold text-accent hover:text-accent-dark"
+          >
+            See subscriber access
+          </Link>
+        </div>
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {SUBSCRIBER_CAROUSEL_PREVIEW.map((item) => (
+            <Card
+              key={`${item.variable}-${item.target}`}
+              padding="lg"
+              className="min-w-[310px] max-w-[340px] border-l-4 border-l-accent"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                    {item.target}
+                  </p>
+                  <h3
+                    className="mt-2 text-xl leading-tight text-ink"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {item.variable}
+                  </h3>
+                </div>
+                <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
+                  Locked
+                </span>
+              </div>
+              <div className="mt-8 space-y-3">
+                {["Consensus", "Institution", "Actual"].map((label, index) => (
+                  <div key={label}>
+                    <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-muted">
+                      <span>{label}</span>
+                      <span>{index === 2 ? "Public" : "Subscriber"}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-bg">
+                      <div
+                        className={`h-full rounded-full ${
+                          index === 0
+                            ? "w-3/4 bg-accent"
+                            : index === 1
+                              ? "w-1/2 bg-signal-orange"
+                              : "w-2/3 bg-ink"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 text-sm leading-6 text-muted">{item.detail}</p>
+            </Card>
+          ))}
+        </div>
+        <div className="mt-5 border-l-4 border-l-accent bg-surface px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-2xl text-sm leading-6 text-muted">
+              Early access is by request while the subscriber data product is being built:
+              consensus, vintage history, dashboards, watchlists, and exports.
+            </p>
+            <Link
+              href="/pricing"
+              className="inline-flex items-center rounded-[10px] bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
+            >
+              Request access
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Actuals Only</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Public macro cards
+            </h2>
+          </div>
+          <Link href="/variables" className="text-sm font-semibold text-accent hover:text-accent-dark">
+            View all variables
+          </Link>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {featuredVariables.map((variable) => {
+            const latest = latestActuals.get(variable.id);
+            const value = latest ? parseFloat(latest.value) : null;
+            const isPositive = value !== null && value >= 0;
+            return (
+              <Link
+                key={variable.id}
+                href={`/variables/${variable.slug}`}
+                className="card group px-5 py-5 transition-colors hover:border-accent"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                      {COUNTRY_LABELS[variable.countryCode] ?? variable.countryCode}
+                    </p>
+                    <h3 className="mt-2 text-base font-semibold text-ink">
+                      {variable.name}
+                    </h3>
+                  </div>
+                  <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
+                    {latest?.source ?? "No actual"}
+                  </span>
+                </div>
+                {latest && value !== null ? (
+                  <div className="mt-8 flex items-end justify-between gap-4">
+                    <p
+                      className={`font-mono text-4xl font-bold leading-none tabular-nums ${
+                        isPositive ? "text-signal-green" : "text-signal-red"
+                      }`}
+                    >
+                      {formatActual(latest.value, variable.unit)}
+                    </p>
+                    <p className="text-sm font-medium text-muted">{latest.targetPeriod}</p>
+                  </div>
+                ) : (
+                  <p className="mt-8 text-sm text-muted">Actual pending.</p>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <SectionLabel>Institution Spotlight</SectionLabel>
+          <h2
+            className="text-3xl leading-tight tracking-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Who is already in the record?
+          </h2>
+          <p className="mt-4 text-base leading-7 text-muted">
+            Farfield starts with public institutions so the trust layer exists before
+            independent forecasters and marketplace features arrive.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {spotlight.map((institution) => {
+            const forecastCount = Number(institution.forecastCount);
+            const scoredCount = Number(institution.scoredCount);
+            const variableCount = Number(institution.variableCount);
+            const countryCount = Number(institution.countryCount);
+            return (
+              <Link
+                key={institution.id}
+                href={`/forecasters/${institution.slug}`}
+                className="card px-5 py-4 transition-colors hover:border-accent"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-base font-semibold text-ink">{institution.name}</h3>
+                  <span className="rounded-full bg-accent-light px-3 py-1 text-xs font-semibold text-accent">
+                    {statusLabel(scoredCount, forecastCount)}
+                  </span>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="font-mono text-xl font-bold text-ink tabular-nums">
+                      {forecastCount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted">Forecasts</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-xl font-bold text-ink tabular-nums">
+                      {variableCount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted">Variables</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-xl font-bold text-ink tabular-nums">
+                      {countryCount.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted">Geos</p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Card padding="lg" className="border-l-4 border-l-accent">
+          <SectionLabel>Methodology</SectionLabel>
+          <h2
+            className="text-3xl leading-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Built around exact source links
+          </h2>
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            {methodologyNotes.map((note) => (
+              <Link key={note.slug} href={`/methodology/${note.slug}`} className="group">
+                <div className="h-full border-t border-border pt-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                    {note.tag}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-ink group-hover:text-accent">
+                    {note.title}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+          <Link
+            href="/methodology"
+            className="mt-8 inline-flex text-sm font-semibold text-accent hover:text-accent-dark"
+          >
+            View methodology
+          </Link>
+        </Card>
+
+        <Card padding="lg" className="bg-bg">
+          <SectionLabel>Subscriber Layer</SectionLabel>
+          <h2
+            className="text-3xl leading-tight text-ink"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Locked premium modules
+          </h2>
+          <div className="mt-6 grid gap-3">
+            {[
+              "Current consensus values",
+              "Vintage history and revision paths",
+              "Forecaster-by-forecaster series",
+              "Dispersion, rankings, and exports",
+            ].map((item) => (
+              <div key={item} className="flex items-center justify-between border-b border-border pb-3">
+                <span className="text-sm font-medium text-ink">{item}</span>
+                <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-muted">
+                  Locked
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

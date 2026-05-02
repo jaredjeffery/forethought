@@ -7,6 +7,7 @@ import { join } from "path";
 import { db } from "../src/lib/db";
 import { variables, actuals, forecasts, forecasters } from "../src/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { createVariableSlug } from "../src/lib/slugs";
 
 const VINTAGE_LABEL = "2025-Oct";
 const VINTAGE_PUB_DATE = new Date("2025-10-21");
@@ -49,7 +50,14 @@ async function main() {
     // Upsert variable
     const [variable] = await db
       .insert(variables)
-      .values({ name, countryCode: COUNTRY_CODE, category: "COMMODITY", unit, frequency: "ANNUAL" })
+      .values({
+        slug: createVariableSlug(name, COUNTRY_CODE),
+        name,
+        countryCode: COUNTRY_CODE,
+        category: "COMMODITY",
+        unit,
+        frequency: "ANNUAL",
+      })
       .onConflictDoNothing()
       .returning({ id: variables.id });
 

@@ -6,7 +6,8 @@ import { db } from "@/lib/db";
 import { forecasts, forecastScores } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
-import { ok, handleError } from "@/lib/api-helpers";
+import { ok, error, handleError } from "@/lib/api-helpers";
+import { canAccessPremiumForecastData, getForecastDataAccess } from "@/lib/access/forecast-data";
 
 const querySchema = z.object({
   variable_id:  z.string().uuid().optional(),
@@ -17,6 +18,11 @@ const querySchema = z.object({
 
 export async function GET(request: Request) {
   try {
+    const access = await getForecastDataAccess();
+    if (!canAccessPremiumForecastData(access)) {
+      return error("Forecast values require a subscriber account", 403);
+    }
+
     const { searchParams } = new URL(request.url);
     const params = querySchema.parse({
       variable_id:   searchParams.get("variable_id")   ?? undefined,

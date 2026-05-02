@@ -25,12 +25,15 @@ async function main() {
   console.log(`Ingesting ${vintages.length} ECB MPD vintage(s)...`);
 
   let totalInserted = 0;
+  let totalUpdated = 0;
   for (const v of vintages) {
     const result = await ingestEcbMpdVintage(v);
     totalInserted += result.forecasts_inserted;
+    totalUpdated += result.forecasts_updated;
   }
 
   console.log(`\nTotal forecasts inserted: ${totalInserted}`);
+  console.log(`Total forecasts updated: ${totalUpdated}`);
 }
 
 main()
