@@ -1,6 +1,6 @@
 // IMF World Economic Outlook (WEO) ingestion.
-// Reads from a locally downloaded WEO file and imports forecasts for the
-// 6 core variables tracked in Phase 1.
+// Reads from a locally downloaded WEO file and imports forecasts plus
+// WEO-carried actuals for the core variables tracked in Phase 1.
 //
 // WHY LOCAL FILES: IMF's WEO download page uses JavaScript rendering and
 // WAF rules that block automated HTTP access. The WEO is published twice
@@ -23,11 +23,21 @@
 //
 // Run with: npm run ingest:weo
 
+import { createHash } from "crypto";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import * as XLSX from "xlsx";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { forecasters, variables, forecasts } from "../db/schema";
+import {
+  actuals,
+  forecasters,
+  forecasts,
+  ingestionRuns,
+  sourceDocuments,
+  variableSourceMappings,
+  variables,
+} from "../db/schema";
 
 // ---------------------------------------------------------------------------
 // WEO subject code → our variable name  (same codes in both old and new format)
@@ -141,6 +151,42 @@ export interface WeoRow {
   subjectCode: string;
   yearData: Record<string, string>; // "2024" → "2.5"
   estimatesStartAfter: number;
+  historicalDataSource: string | null;
+  actualCutoffSource: "latest_actual_annual_data" | "estimates_start_after" | "fallback_estimates_year";
+  isCountryGroup: boolean;
+  sourceNotes: string | null;
+}
+
+interface ParsedWeoVintage {
+  rows: WeoRow[];
+  format: string;
+  fileNames: string[];
+  filePaths: string[];
+  fileHash: string;
+}
+
+const WEO_SOURCE_NAME = "IMF-WEO";
+
+function cleanCell(value: string | number | null | undefined): string {
+  return String(value ?? "").trim();
+}
+
+function hasActualMetadata(row: WeoRow): boolean {
+  if (row.historicalDataSource) return true;
+  if (row.actualCutoffSource === "estimates_start_after") return true;
+  return row.isCountryGroup && row.actualCutoffSource === "fallback_estimates_year";
+}
+
+function getSourceUrl(vintage: WeoVintage): string {
+  return `https://www.imf.org/en/Publications/WEO/weo-database/${vintage.year}/${vintage.month}`;
+}
+
+function hashFiles(filePaths: string[]): string {
+  const hash = createHash("sha256");
+  for (const filePath of filePaths) {
+    hash.update(readFileSync(filePath));
+  }
+  return hash.digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +215,8 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
 
     const seriesIdx       = headers.findIndex((h) => h === "SERIES_CODE");
     const latestActualIdx = headers.findIndex((h) => h === "LATEST_ACTUAL_ANNUAL_DATA");
+    const historicalSourceIdx = headers.findIndex((h) => h === "HISTORICAL_DATA_SOURCE");
+    const sourceNotesIdx = headers.findIndex((h) => h === "FULL_SOURCE_CITATION" || h === "SHORT_SOURCE_CITATION");
 
     if (seriesIdx === -1) {
       throw new Error(`SERIES_CODE column not found in sheet "${sheetName}" of ${filePath}`);
@@ -198,12 +246,15 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
       }
       if (!countryCode) continue;
 
-      const rawLatest = cols[latestActualIdx];
-      const estimatesStartAfter =
-        rawLatest != null && rawLatest !== ""
-          ? parseInt(String(rawLatest), 10)
-          : fallbackEstimatesYear;
+      const rawLatest = cleanCell(cols[latestActualIdx]);
+      const estimatesStartAfter = rawLatest
+        ? parseInt(rawLatest, 10)
+        : fallbackEstimatesYear;
       if (isNaN(estimatesStartAfter)) continue;
+      const historicalDataSource =
+        historicalSourceIdx >= 0 ? cleanCell(cols[historicalSourceIdx]) || null : null;
+      const sourceNotes =
+        sourceNotesIdx >= 0 ? cleanCell(cols[sourceNotesIdx]) || null : null;
 
       const yearData: Record<string, string> = {};
       for (const { index, year } of yearCols) {
@@ -213,7 +264,16 @@ export function parseWeoXlsxFile(filePath: string, fallbackEstimatesYear: number
         }
       }
 
-      rows.push({ countryCode, subjectCode, yearData, estimatesStartAfter });
+      rows.push({
+        countryCode,
+        subjectCode,
+        yearData,
+        estimatesStartAfter,
+        historicalDataSource,
+        actualCutoffSource: rawLatest ? "latest_actual_annual_data" : "fallback_estimates_year",
+        isCountryGroup: rawCountryCode.startsWith("G"),
+        sourceNotes,
+      });
     }
   }
 
@@ -274,6 +334,10 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
 
   const seriesIdx       = headers.indexOf("SERIES_CODE");
   const latestActualIdx = headers.indexOf("LATEST_ACTUAL_ANNUAL_DATA");
+  const historicalSourceIdx = headers.indexOf("HISTORICAL_DATA_SOURCE");
+  const sourceNotesIdx = headers.indexOf("FULL_SOURCE_CITATION") >= 0
+    ? headers.indexOf("FULL_SOURCE_CITATION")
+    : headers.indexOf("SHORT_SOURCE_CITATION");
 
   if (seriesIdx === -1 || latestActualIdx === -1) {
     throw new Error(
@@ -315,11 +379,15 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
 
     // LATEST_ACTUAL_ANNUAL_DATA is empty for most group rows (WLD, ADV, EME, G7)
     // in the new CSV format. Fall back to vintageYear - 1 in that case.
-    const rawLatest = cols[latestActualIdx] ?? "";
+    const rawLatest = cleanCell(cols[latestActualIdx]);
     const estimatesStartAfter = rawLatest
       ? parseInt(rawLatest, 10)
       : fallbackEstimatesYear;
     if (isNaN(estimatesStartAfter)) continue;
+    const historicalDataSource =
+      historicalSourceIdx >= 0 ? cleanCell(cols[historicalSourceIdx]) || null : null;
+    const sourceNotes =
+      sourceNotesIdx >= 0 ? cleanCell(cols[sourceNotesIdx]) || null : null;
 
     const yearData: Record<string, string> = {};
     for (const { index, year } of yearCols) {
@@ -329,7 +397,16 @@ export function parseWeoCsvFile(filePath: string, fallbackEstimatesYear: number)
       }
     }
 
-    rows.push({ countryCode, subjectCode, yearData, estimatesStartAfter });
+    rows.push({
+      countryCode,
+      subjectCode,
+      yearData,
+      estimatesStartAfter,
+      historicalDataSource,
+      actualCutoffSource: rawLatest ? "latest_actual_annual_data" : "fallback_estimates_year",
+      isCountryGroup: rawCountryCode.startsWith("G"),
+      sourceNotes,
+    });
   }
 
   return rows;
@@ -363,6 +440,7 @@ function parseWeoLegacyFile(filePath: string, fileType: "countries" | "groups"):
 
   const subjectCodeIdx = headers.findIndex((h) => h === "WEO Subject Code");
   const estimatesIdx   = headers.findIndex((h) => h === "Estimates Start After");
+  const sourceNotesIdx = headers.findIndex((h) => h === "Country/Series-specific Notes");
   const countryColIdx  =
     fileType === "countries"
       ? headers.findIndex((h) => h === "ISO")
@@ -395,6 +473,8 @@ function parseWeoLegacyFile(filePath: string, fileType: "countries" | "groups"):
 
     const estimatesStartAfter = parseInt(cols[estimatesIdx] ?? "", 10);
     if (isNaN(estimatesStartAfter)) continue;
+    const sourceNotes =
+      sourceNotesIdx >= 0 ? cleanCell(cols[sourceNotesIdx]) || null : null;
 
     const yearData: Record<string, string> = {};
     for (const { index, year } of yearCols) {
@@ -404,7 +484,16 @@ function parseWeoLegacyFile(filePath: string, fileType: "countries" | "groups"):
       }
     }
 
-    rows.push({ countryCode, subjectCode, yearData, estimatesStartAfter });
+    rows.push({
+      countryCode,
+      subjectCode,
+      yearData,
+      estimatesStartAfter,
+      historicalDataSource: null,
+      actualCutoffSource: "estimates_start_after",
+      isCountryGroup: fileType === "groups",
+      sourceNotes,
+    });
   }
 
   return rows;
@@ -432,80 +521,254 @@ async function buildLookupMaps() {
 }
 
 // ---------------------------------------------------------------------------
-// Ingest a single WEO vintage (forecasts only — actuals come from World Bank)
+// Source provenance helpers
+// ---------------------------------------------------------------------------
+
+function loadWeoVintage(vintage: WeoVintage): ParsedWeoVintage {
+  if (vintage.xlsx_file) {
+    const filePath = join(DATA_DIR, vintage.xlsx_file);
+    return {
+      rows: parseWeoXlsxFile(filePath, vintage.year - 1),
+      format: `xlsx workbook (${vintage.xlsx_file})`,
+      fileNames: [vintage.xlsx_file],
+      filePaths: [filePath],
+      fileHash: hashFiles([filePath]),
+    };
+  }
+
+  if (vintage.csv_file) {
+    const filePath = join(DATA_DIR, vintage.csv_file);
+    return {
+      rows: parseWeoCsvFile(filePath, vintage.year - 1),
+      format: `new CSV (${vintage.csv_file})`,
+      fileNames: [vintage.csv_file],
+      filePaths: [filePath],
+      fileHash: hashFiles([filePath]),
+    };
+  }
+
+  if (vintage.countries_file && vintage.groups_file) {
+    const countriesPath = join(DATA_DIR, vintage.countries_file);
+    const groupsPath = join(DATA_DIR, vintage.groups_file);
+    const filePaths = [countriesPath, groupsPath];
+    return {
+      rows: [
+        ...parseWeoLegacyFile(countriesPath, "countries"),
+        ...parseWeoLegacyFile(groupsPath, "groups"),
+      ],
+      format: `legacy tab-delimited (${vintage.countries_file} + ${vintage.groups_file})`,
+      fileNames: [vintage.countries_file, vintage.groups_file],
+      filePaths,
+      fileHash: hashFiles(filePaths),
+    };
+  }
+
+  throw new Error(`Vintage "${vintage.label}" has no file configured - check WEO_VINTAGES in imf-weo.ts`);
+}
+
+async function upsertSourceDocument(vintage: WeoVintage, parsed: ParsedWeoVintage): Promise<string> {
+  const [doc] = await db
+    .insert(sourceDocuments)
+    .values({
+      sourceName: WEO_SOURCE_NAME,
+      publicationName: "World Economic Outlook",
+      publicationDate: vintage.publication_date,
+      vintageLabel: vintage.label,
+      sourceUrl: getSourceUrl(vintage),
+      storageUrl: parsed.fileNames.map((name) => `data/weo/${name}`).join(";"),
+      fileHash: parsed.fileHash,
+    })
+    .onConflictDoUpdate({
+      target: [sourceDocuments.sourceName, sourceDocuments.vintageLabel],
+      set: {
+        publicationDate: sql`excluded.publication_date`,
+        sourceUrl: sql`excluded.source_url`,
+        storageUrl: sql`excluded.storage_url`,
+        fileHash: sql`excluded.file_hash`,
+        ingestedAt: new Date(),
+      },
+    })
+    .returning({ id: sourceDocuments.id });
+
+  return doc.id;
+}
+
+async function assignActualReleaseNumbers(rows: (typeof actuals.$inferInsert)[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const existingRows = await db
+    .select({
+      variableId: actuals.variableId,
+      targetPeriod: actuals.targetPeriod,
+      releaseNumber: actuals.releaseNumber,
+      vintageDate: actuals.vintageDate,
+    })
+    .from(actuals)
+    .where(eq(actuals.source, WEO_SOURCE_NAME));
+
+  const maxReleaseByKey = new Map<string, number>();
+  const releaseByVintageKey = new Map<string, number>();
+
+  for (const row of existingRows) {
+    const key = `${row.variableId}|${row.targetPeriod}`;
+    const vintageKey = `${key}|${row.vintageDate ?? ""}`;
+    maxReleaseByKey.set(key, Math.max(maxReleaseByKey.get(key) ?? 0, row.releaseNumber));
+    releaseByVintageKey.set(vintageKey, row.releaseNumber);
+  }
+
+  for (const row of rows) {
+    const key = `${row.variableId}|${row.targetPeriod}`;
+    const vintageKey = `${key}|${row.vintageDate ?? ""}`;
+    const existingRelease = releaseByVintageKey.get(vintageKey);
+    if (existingRelease) {
+      row.releaseNumber = existingRelease;
+      continue;
+    }
+
+    const nextRelease = (maxReleaseByKey.get(key) ?? 0) + 1;
+    row.releaseNumber = nextRelease;
+    maxReleaseByKey.set(key, nextRelease);
+    releaseByVintageKey.set(vintageKey, nextRelease);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ingest a single WEO vintage
 // ---------------------------------------------------------------------------
 
 export async function ingestWeoVintage(vintage: WeoVintage): Promise<{
   forecasts_inserted: number;
+  actuals_upserted: number;
   skipped_no_variable: number;
+  skipped_actual_metadata: number;
 }> {
-  console.log(`\nIngesting WEO ${vintage.label} forecasts from local files...`);
-
-  // Route to the correct parser based on which file type is configured
-  let allRows: WeoRow[];
-  if (vintage.xlsx_file) {
-    const xlsxPath = join(DATA_DIR, vintage.xlsx_file);
-    const fallbackEstimatesYear = vintage.year - 1;
-    allRows = parseWeoXlsxFile(xlsxPath, fallbackEstimatesYear);
-    console.log(`  Format: xlsx workbook (${vintage.xlsx_file})`);
-  } else if (vintage.csv_file) {
-    const csvPath = join(DATA_DIR, vintage.csv_file);
-    // fallback for group rows where LATEST_ACTUAL_ANNUAL_DATA is empty:
-    // use year prior to publication (e.g. 2024 for the Oct-2025 or Apr-2026 release)
-    const fallbackEstimatesYear = vintage.year - 1;
-    allRows = parseWeoCsvFile(csvPath, fallbackEstimatesYear);
-    console.log(`  Format: new CSV (${vintage.csv_file})`);
-  } else if (vintage.countries_file && vintage.groups_file) {
-    const countriesPath = join(DATA_DIR, vintage.countries_file);
-    const groupsPath    = join(DATA_DIR, vintage.groups_file);
-    const countriesRows = parseWeoLegacyFile(countriesPath, "countries");
-    const groupsRows    = parseWeoLegacyFile(groupsPath, "groups");
-    allRows = [...countriesRows, ...groupsRows];
-    console.log(`  Format: legacy tab-delimited (${vintage.countries_file} + ${vintage.groups_file})`);
-  } else {
-    throw new Error(`Vintage "${vintage.label}" has no file configured — check WEO_VINTAGES in imf-weo.ts`);
-  }
-
+  console.log(`\nIngesting WEO ${vintage.label} from local files...`);
+  const parsed = loadWeoVintage(vintage);
+  const allRows = parsed.rows;
+  console.log(`  Format: ${parsed.format}`);
   console.log(`  Parsed ${allRows.length} matching rows`);
+
+  const sourceDocumentId = await upsertSourceDocument(vintage, parsed);
+  const [run] = await db
+    .insert(ingestionRuns)
+    .values({
+      sourceDocumentId,
+      sourceName: WEO_SOURCE_NAME,
+      status: "running",
+      startedAt: new Date(),
+    })
+    .returning({ id: ingestionRuns.id });
 
   const { variableMap, forecasterIds } = await buildLookupMaps();
   const imfId = forecasterIds.get("imf");
-  if (!imfId) throw new Error("IMF forecaster not found — run npm run seed first");
+  if (!imfId) throw new Error("IMF forecaster not found - run npm run seed first");
 
   const submittedAt = new Date(vintage.publication_date);
   let forecastsInserted = 0;
+  let actualsUpserted = 0;
   let skippedNoVariable = 0;
+  let skippedActualMetadata = 0;
 
   const forecastRows: (typeof forecasts.$inferInsert)[] = [];
+  const actualRows: (typeof actuals.$inferInsert)[] = [];
+  const mappingRows = new Map<string, typeof variableSourceMappings.$inferInsert>();
 
   for (const row of allRows) {
     const variableName = SUBJECT_CODE_MAP[row.subjectCode];
-    const variableId   = variableMap.get(`${variableName}|${row.countryCode}`);
+    const variableId = variableMap.get(`${variableName}|${row.countryCode}`);
 
     if (!variableId) {
       skippedNoVariable++;
       continue;
     }
 
+    mappingRows.set(`${row.subjectCode}|${variableId}`, {
+      sourceName: WEO_SOURCE_NAME,
+      sourceVariableCode: row.subjectCode,
+      sourceVariableName: variableName,
+      farfieldVariableId: variableId,
+      unitTransform: "none",
+      notes: row.historicalDataSource
+        ? `WEO historical data source: ${row.historicalDataSource}`
+        : row.sourceNotes,
+    });
+
     for (const [yearStr, value] of Object.entries(row.yearData)) {
       const year = parseInt(yearStr, 10);
-      // Only import forecast years (not actuals — those come from World Bank)
-      if (year <= row.estimatesStartAfter) continue;
+      if (year <= row.estimatesStartAfter) {
+        if (!hasActualMetadata(row)) {
+          skippedActualMetadata++;
+          continue;
+        }
 
-      forecastRows.push({
-        forecasterId: imfId,
-        variableId,
-        targetPeriod: yearStr,
-        value,
-        submittedAt,
-        vintage: vintage.label,
-        sourceUrl: `https://www.imf.org/en/Publications/WEO/weo-database/${vintage.year}/${vintage.month}`,
-      });
+        actualRows.push({
+          variableId,
+          targetPeriod: yearStr,
+          value,
+          publishedAt: submittedAt,
+          source: WEO_SOURCE_NAME,
+          vintageDate: vintage.publication_date,
+          releaseNumber: 1,
+          isLatest: true,
+          sourceDocumentId,
+        });
+      } else {
+        forecastRows.push({
+          forecasterId: imfId,
+          variableId,
+          targetPeriod: yearStr,
+          value,
+          submittedAt,
+          forecastMadeAt: submittedAt,
+          vintage: vintage.label,
+          sourceUrl: getSourceUrl(vintage),
+          sourceDocumentId,
+        });
+      }
     }
   }
 
-  // Insert in batches of 500
   const BATCH = 500;
+  await assignActualReleaseNumbers(actualRows);
+
+  const mappings = Array.from(mappingRows.values());
+  for (let i = 0; i < mappings.length; i += BATCH) {
+    await db
+      .insert(variableSourceMappings)
+      .values(mappings.slice(i, i + BATCH))
+      .onConflictDoUpdate({
+        target: [
+          variableSourceMappings.sourceName,
+          variableSourceMappings.sourceVariableCode,
+          variableSourceMappings.farfieldVariableId,
+        ],
+        set: {
+          sourceVariableName: sql`excluded.source_variable_name`,
+          unitTransform: sql`excluded.unit_transform`,
+          notes: sql`excluded.notes`,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  for (let i = 0; i < actualRows.length; i += BATCH) {
+    const result = await db
+      .insert(actuals)
+      .values(actualRows.slice(i, i + BATCH))
+      .onConflictDoUpdate({
+        target: [actuals.variableId, actuals.targetPeriod, actuals.source, actuals.releaseNumber],
+        set: {
+          value: sql`excluded.value`,
+          publishedAt: sql`excluded.published_at`,
+          vintageDate: sql`excluded.vintage_date`,
+          isLatest: sql`excluded.is_latest`,
+          sourceDocumentId: sql`excluded.source_document_id`,
+        },
+      })
+      .returning({ id: actuals.id });
+    actualsUpserted += result.length;
+  }
+
   for (let i = 0; i < forecastRows.length; i += BATCH) {
     const result = await db
       .insert(forecasts)
@@ -515,9 +778,23 @@ export async function ingestWeoVintage(vintage: WeoVintage): Promise<{
     forecastsInserted += result.length;
   }
 
-  return { forecasts_inserted: forecastsInserted, skipped_no_variable: skippedNoVariable };
-}
+  await db
+    .update(ingestionRuns)
+    .set({
+      status: "success",
+      recordsCreated: forecastsInserted + actualsUpserted,
+      recordsSkipped: skippedNoVariable + skippedActualMetadata,
+      finishedAt: new Date(),
+    })
+    .where(eq(ingestionRuns.id, run.id));
 
+  return {
+    forecasts_inserted: forecastsInserted,
+    actuals_upserted: actualsUpserted,
+    skipped_no_variable: skippedNoVariable,
+    skipped_actual_metadata: skippedActualMetadata,
+  };
+}
 // ---------------------------------------------------------------------------
 // List which vintages have local files available
 // ---------------------------------------------------------------------------
