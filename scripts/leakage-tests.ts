@@ -197,6 +197,7 @@ async function main() {
     );
 
     const publicContentRoutes = [
+      "/pricing",
       "/articles",
       `/articles/${articles[0]?.slug}`,
       "/methodology",

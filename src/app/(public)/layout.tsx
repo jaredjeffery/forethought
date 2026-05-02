@@ -38,6 +38,9 @@ export default async function PublicLayout({ children }: { children: React.React
               <Link href="/methodology" className="hover:text-ink transition-colors">
                 Methodology
               </Link>
+              <Link href="/pricing" className="hover:text-ink transition-colors">
+                Pricing
+              </Link>
             </div>
             <div className="flex items-center gap-3">
               {session?.user ? (

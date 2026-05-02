@@ -495,9 +495,12 @@ export default async function LandingPage() {
               Forecasts compared with consensus
             </h2>
           </div>
-          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Locked
-          </span>
+          <Link
+            href="/pricing"
+            className="text-sm font-semibold text-accent hover:text-accent-dark"
+          >
+            See subscriber access
+          </Link>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-2">
           {SUBSCRIBER_CAROUSEL_PREVIEW.map((item) => (
@@ -546,6 +549,20 @@ export default async function LandingPage() {
               <p className="mt-6 text-sm leading-6 text-muted">{item.detail}</p>
             </Card>
           ))}
+        </div>
+        <div className="mt-5 border-l-4 border-l-accent bg-surface px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-2xl text-sm leading-6 text-muted">
+              Early access is by request while the subscriber data product is being built:
+              consensus, vintage history, dashboards, watchlists, and exports.
+            </p>
+            <Link
+              href="/pricing"
+              className="inline-flex items-center rounded-[10px] bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
+            >
+              Request access
+            </Link>
+          </div>
         </div>
       </section>
 

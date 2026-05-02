@@ -149,6 +149,12 @@ export default async function VariableDetailPage({ params }: PageProps) {
               <p className="mt-1 text-sm text-muted">
                 Forecast values, consensus history, dispersion, and exports require a subscriber account.
               </p>
+              <Link
+                href="/pricing"
+                className="mt-3 inline-flex text-sm font-semibold text-accent hover:text-accent-dark"
+              >
+                See subscriber access
+              </Link>
             </div>
           </div>
         </Card>

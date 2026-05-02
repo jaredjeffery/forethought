@@ -91,6 +91,12 @@ export default async function ArticleDetailPage({ params }: PageProps) {
           Current forecast values, consensus values, vintage paths, and exports are held
           behind authentication and plan checks.
         </p>
+        <Link
+          href="/pricing"
+          className="mt-4 inline-flex text-sm font-semibold text-accent hover:text-accent-dark"
+        >
+          See subscriber access
+        </Link>
       </Card>
     </article>
   );
