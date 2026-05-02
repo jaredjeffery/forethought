@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { articles, findArticle } from "@/lib/content";
+import { ArticleVisual } from "@/components/ArticleVisual";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
@@ -59,6 +60,10 @@ export default async function ArticleDetailPage({ params }: PageProps) {
           <span className="rounded-full bg-surface px-3 py-1">{article.publishedAt}</span>
         </div>
       </header>
+
+      <div className="mt-8 overflow-hidden border border-border bg-surface shadow-sm">
+        <ArticleVisual article={article} size="lg" />
+      </div>
 
       <div className="mt-10 space-y-8">
         {article.sections.map((section) => (

@@ -12,6 +12,7 @@ import {
 import { countDistinct, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { articles, methodologyNotes } from "@/lib/content";
+import { ArticleVisual } from "@/components/ArticleVisual";
 import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
@@ -158,6 +159,22 @@ export default async function LandingPage() {
   );
 
   const spotlight = institutions.slice(0, 4);
+  const leadArticle = articles.find((article) => article.prominence === "lead") ?? articles[0];
+  const topArticles = articles
+    .filter(
+      (article) =>
+        article.prominence === "top" && article.column !== "Forecaster Spotlight",
+    )
+    .slice(0, 3);
+  const leadingIndicators = articles
+    .filter((article) => article.column === "Leading Indicators")
+    .slice(0, 3);
+  const forecasterSpotlight = articles.find(
+    (article) => article.column === "Forecaster Spotlight",
+  );
+  const blogArticles = articles
+    .filter((article) => article.column === "Farfield Blog")
+    .slice(0, 4);
   const chartVariable =
     featuredVariables.find(
       (variable) =>
@@ -273,40 +290,156 @@ export default async function LandingPage() {
           <div>
             <SectionLabel className="mb-2">Farfield Editorial</SectionLabel>
             <h2
-              className="text-3xl tracking-tight text-ink"
+              className="text-4xl tracking-tight text-ink"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Research notes for the public record
+              Analysis that makes the forecast record worth reading
             </h2>
           </div>
           <Link href="/articles" className="text-sm font-semibold text-accent hover:text-accent-dark">
             View all articles
           </Link>
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          {articles.slice(0, 3).map((article) => (
-            <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
-              <Card padding="lg" className="h-full min-h-[250px] transition-colors group-hover:border-accent">
-                <div className="flex h-full flex-col">
-                  <div className="flex items-center justify-between gap-3">
+        <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+          {leadArticle && (
+            <Link href={`/articles/${leadArticle.slug}`} className="group">
+              <Card padding="none" raised className="h-full overflow-hidden transition-colors group-hover:border-accent">
+                <ArticleVisual article={leadArticle} size="lg" />
+                <div className="p-7">
+                  <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-widest text-muted">
+                    <span className="text-accent">{leadArticle.label}</span>
+                    <span>{leadArticle.tag}</span>
+                    <span>{leadArticle.readingTime}</span>
+                  </div>
+                  <h3
+                    className="mt-4 max-w-2xl text-4xl leading-tight tracking-tight text-ink group-hover:text-accent"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {leadArticle.title}
+                  </h3>
+                  <p className="mt-4 max-w-2xl text-base leading-7 text-muted">
+                    {leadArticle.dek}
+                  </p>
+                </div>
+              </Card>
+            </Link>
+          )}
+
+          <div className="grid gap-4">
+            {topArticles.map((article) => (
+              <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+                <Card padding="none" className="grid overflow-hidden transition-colors group-hover:border-accent sm:grid-cols-[155px_1fr] lg:grid-cols-1 xl:grid-cols-[155px_1fr]">
+                  <ArticleVisual article={article} />
+                  <div className="p-5">
                     <p className="text-xs font-bold uppercase tracking-widest text-accent">
                       {article.label}
                     </p>
-                    <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
-                      {article.tag}
-                    </span>
+                    <h3
+                      className="mt-3 text-xl leading-tight text-ink group-hover:text-accent"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {article.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-muted">{article.dek}</p>
                   </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-8 lg:grid-cols-[1fr_0.8fr]">
+        <div>
+          <div className="mb-5 flex items-end justify-between gap-3">
+            <div>
+              <SectionLabel className="mb-2">Leading Indicators</SectionLabel>
+              <h2
+                className="text-3xl tracking-tight text-ink"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Signals forecasters watch before the data lands
+              </h2>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {leadingIndicators.map((article) => (
+              <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+                <Card padding="none" className="h-full overflow-hidden transition-colors group-hover:border-accent">
+                  <ArticleVisual article={article} />
+                  <div className="p-5">
+                    <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                      {article.tag}
+                    </p>
+                    <h3
+                      className="mt-3 text-xl leading-tight text-ink group-hover:text-accent"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {article.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-muted">{article.dek}</p>
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {forecasterSpotlight && (
+          <div>
+            <SectionLabel className="mb-5">Forecaster Spotlight</SectionLabel>
+            <Link href={`/articles/${forecasterSpotlight.slug}`} className="group">
+              <Card padding="none" raised className="h-full overflow-hidden transition-colors group-hover:border-accent">
+                <ArticleVisual article={forecasterSpotlight} size="lg" />
+                <div className="p-6">
+                  <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                    Regular profile
+                  </p>
                   <h3
-                    className="mt-8 text-2xl leading-tight text-ink"
+                    className="mt-3 text-3xl leading-tight text-ink group-hover:text-accent"
                     style={{ fontFamily: "var(--font-display)" }}
                   >
-                    {article.title}
+                    {forecasterSpotlight.title}
                   </h3>
-                  <p className="mt-4 text-sm leading-6 text-muted">{article.dek}</p>
-                  <p className="mt-auto pt-8 text-xs font-semibold uppercase tracking-widest text-border-dark">
-                    {article.readingTime}
+                  <p className="mt-4 text-sm leading-6 text-muted">
+                    {forecasterSpotlight.dek}
                   </p>
                 </div>
+              </Card>
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Farfield Blog</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Notes from the data room
+            </h2>
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {blogArticles.map((article) => (
+            <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+              <Card padding="md" className="h-full transition-colors group-hover:border-accent">
+                <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                  {article.tag}
+                </p>
+                <h3
+                  className="mt-4 text-lg leading-tight text-ink group-hover:text-accent"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {article.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-muted">{article.dek}</p>
+                <p className="mt-6 text-xs font-semibold uppercase tracking-widest text-border-dark">
+                  {article.readingTime}
+                </p>
               </Card>
             </Link>
           ))}
