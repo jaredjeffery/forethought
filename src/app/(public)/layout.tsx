@@ -19,7 +19,7 @@ export default async function PublicLayout({ children }: { children: React.React
               className="text-xl text-ink tracking-tight"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              Forethought
+              Farfield
             </span>
             <span className="block h-[2.5px] w-full mt-0.5 bg-accent transition-all duration-300 group-hover:w-3/4" />
           </Link>
@@ -31,6 +31,12 @@ export default async function PublicLayout({ children }: { children: React.React
               </Link>
               <Link href="/forecasters" className="hover:text-ink transition-colors">
                 Forecasters
+              </Link>
+              <Link href="/articles" className="hover:text-ink transition-colors">
+                Articles
+              </Link>
+              <Link href="/methodology" className="hover:text-ink transition-colors">
+                Methodology
               </Link>
             </div>
             <div className="flex items-center gap-3">
@@ -72,7 +78,7 @@ export default async function PublicLayout({ children }: { children: React.React
       <footer className="border-t border-border mt-24">
         <div className="max-w-[1280px] mx-auto px-8 h-14 flex items-center justify-between">
           <p className="text-sm font-medium text-muted" style={{ fontFamily: "var(--font-display)" }}>
-            Forethought
+            Farfield
           </p>
           <p className="text-sm text-muted">
             Transparent performance tracking for economic forecasters.

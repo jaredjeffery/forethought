@@ -7,6 +7,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { db } from "../src/lib/db";
 import { consensusForecasts, forecasts, forecasters, variables } from "../src/lib/db/schema";
+import { articles, methodologyNotes } from "../src/lib/content";
 import { eq } from "drizzle-orm";
 
 type Failure = {
@@ -194,6 +195,24 @@ async function main() {
       !landingHtml.includes("Accuracy Leaderboard") && !landingHtml.includes("MAE"),
       "Accuracy leaderboard terms found in public landing HTML",
     );
+
+    const publicContentRoutes = [
+      "/articles",
+      `/articles/${articles[0]?.slug}`,
+      "/methodology",
+      `/methodology/${methodologyNotes[0]?.slug}`,
+    ].filter((route) => !route.endsWith("/undefined"));
+
+    for (const route of publicContentRoutes) {
+      const response = await fetch(`${baseUrl}${route}`);
+      const html = await response.text();
+      check(
+        `public content route status ${route}`,
+        response.status === 200,
+        `Expected 200, got ${response.status}`,
+      );
+      assertNoSampleValues(`public content route sample values ${route}`, html, premiumSampleValues);
+    }
 
     const variableResponse = await fetch(`${baseUrl}/api/variables/${sampleForecast.variableSlug}`);
     check("public variable API status", variableResponse.status === 200, `Expected 200, got ${variableResponse.status}`);

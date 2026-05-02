@@ -11,6 +11,8 @@ import {
 } from "@/lib/db/schema";
 import { countDistinct, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { articles, methodologyNotes } from "@/lib/content";
+import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 
@@ -36,24 +38,24 @@ const FEATURED_VARIABLES = [
   { name: "Current Account Balance", countryCode: "IND" },
 ];
 
-const EDITORIAL_PREVIEWS = [
+const SUBSCRIBER_CAROUSEL_PREVIEW = [
   {
-    label: "Data note",
-    title: "How Farfield treats WEO actuals",
-    dek: "A short guide to national-authority metadata, fiscal-year mapping, and why first-release scoring matters.",
-    tag: "Methodology",
+    variable: "United States GDP Growth Rate",
+    target: "2026",
+    signal: "Consensus path",
+    detail: "Institution forecasts, consensus, dispersion, and vintage changes stay locked.",
   },
   {
-    label: "Launch brief",
-    title: "The first public forecast record",
-    dek: "What can be checked today across IMF, OECD, ECB, and World Bank source history.",
-    tag: "Forecast record",
+    variable: "United Kingdom Inflation (CPI)",
+    target: "2026",
+    signal: "Forecaster spread",
+    detail: "Subscriber view compares public institutions against the current consensus.",
   },
   {
-    label: "Variable explainer",
-    title: "Why GDP surprises are not all equal",
-    dek: "A plain-English look at horizons, revisions, and why the same miss can mean different things.",
-    tag: "GDP growth",
+    variable: "South Africa Unemployment Rate",
+    target: "2026",
+    signal: "Vintage movement",
+    detail: "As-of snapshots show how the record changes from one source release to the next.",
   },
 ];
 
@@ -156,6 +158,32 @@ export default async function LandingPage() {
   );
 
   const spotlight = institutions.slice(0, 4);
+  const chartVariable =
+    featuredVariables.find(
+      (variable) =>
+        variable.name === "GDP Growth Rate" && variable.countryCode === "WLD",
+    ) ?? featuredVariables[0];
+  const chartActuals = chartVariable
+    ? featuredActuals.filter((actual) => actual.variableId === chartVariable.id)
+    : [];
+  const chartActualByPeriod = new Map<string, typeof chartActuals[number]>();
+
+  for (const actual of chartActuals) {
+    if (!chartActualByPeriod.has(actual.targetPeriod)) {
+      chartActualByPeriod.set(actual.targetPeriod, actual);
+    }
+  }
+
+  const chartData: DataPoint[] = Array.from(chartActualByPeriod.values())
+    .sort((a, b) => a.targetPeriod.localeCompare(b.targetPeriod))
+    .slice(-18)
+    .map((actual) => ({
+      period: actual.targetPeriod,
+      actual: parseFloat(actual.value),
+    }));
+  const latestChartActual = chartData.at(-1);
+  const latestChartValue =
+    typeof latestChartActual?.actual === "number" ? latestChartActual.actual : null;
 
   return (
     <div className="space-y-20">
@@ -190,6 +218,12 @@ export default async function LandingPage() {
                 className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
               >
                 View forecasters
+              </Link>
+              <Link
+                href="/articles"
+                className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+              >
+                Read notes
               </Link>
             </div>
           </div>
@@ -245,33 +279,168 @@ export default async function LandingPage() {
               Research notes for the public record
             </h2>
           </div>
-          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted">
-            Editorial previews
-          </span>
+          <Link href="/articles" className="text-sm font-semibold text-accent hover:text-accent-dark">
+            View all articles
+          </Link>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
-          {EDITORIAL_PREVIEWS.map((article) => (
-            <Card key={article.title} padding="lg" className="min-h-[250px]">
-              <div className="flex h-full flex-col">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-bold uppercase tracking-widest text-accent">
-                    {article.label}
+          {articles.slice(0, 3).map((article) => (
+            <Link key={article.slug} href={`/articles/${article.slug}`} className="group">
+              <Card padding="lg" className="h-full min-h-[250px] transition-colors group-hover:border-accent">
+                <div className="flex h-full flex-col">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                      {article.label}
+                    </p>
+                    <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
+                      {article.tag}
+                    </span>
+                  </div>
+                  <h3
+                    className="mt-8 text-2xl leading-tight text-ink"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {article.title}
+                  </h3>
+                  <p className="mt-4 text-sm leading-6 text-muted">{article.dek}</p>
+                  <p className="mt-auto pt-8 text-xs font-semibold uppercase tracking-widest text-border-dark">
+                    {article.readingTime}
                   </p>
-                  <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
-                    {article.tag}
-                  </span>
                 </div>
-                <h3
-                  className="mt-8 text-2xl leading-tight text-ink"
-                  style={{ fontFamily: "var(--font-display)" }}
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {chartVariable && chartData.length > 0 && (
+        <section className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-stretch">
+          <Card padding="none" raised className="overflow-hidden">
+            <div className="border-b border-border px-6 py-5">
+              <SectionLabel className="mb-2">Public Data Visual</SectionLabel>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2
+                    className="text-3xl tracking-tight text-ink"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {COUNTRY_LABELS[chartVariable.countryCode] ?? chartVariable.countryCode}{" "}
+                    {chartVariable.name}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    Actual outcomes only. Forecast and consensus lines stay locked.
+                  </p>
+                </div>
+                <Link
+                  href={`/variables/${chartVariable.slug}`}
+                  className="text-sm font-semibold text-accent hover:text-accent-dark"
                 >
-                  {article.title}
-                </h3>
-                <p className="mt-4 text-sm leading-6 text-muted">{article.dek}</p>
-                <p className="mt-auto pt-8 text-xs font-semibold uppercase tracking-widest text-border-dark">
-                  Preview
+                  Open variable
+                </Link>
+              </div>
+            </div>
+            <div className="px-3 py-5">
+              <ForecastChart
+                data={chartData}
+                series={[]}
+                unit={chartVariable.unit}
+                height={360}
+              />
+            </div>
+          </Card>
+
+          <Card padding="lg" className="flex flex-col justify-between border-l-4 border-l-signal-green">
+            <div>
+              <SectionLabel>Latest Actual</SectionLabel>
+              <p className="font-mono text-5xl font-bold leading-none text-ink tabular-nums">
+                {latestChartValue !== null
+                  ? `${latestChartValue > 0 ? "+" : ""}${latestChartValue.toFixed(1)}${
+                      chartVariable.unit.includes("%") ? "%" : ""
+                    }`
+                  : "Pending"}
+              </p>
+              <p className="mt-2 text-sm font-medium text-muted">
+                {latestChartActual?.period ?? "No period"} / {chartVariable.unit}
+              </p>
+            </div>
+            <div className="mt-8 grid gap-3 text-sm">
+              <div className="border-t border-border pt-3">
+                <p className="font-semibold text-ink">Public view</p>
+                <p className="mt-1 leading-6 text-muted">
+                  Actual history, source labels, and coverage indicators.
                 </p>
               </div>
+              <div className="border-t border-border pt-3">
+                <p className="font-semibold text-ink">Subscriber view</p>
+                <p className="mt-1 leading-6 text-muted">
+                  Forecast paths, consensus as-of history, dispersion, and exports.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </section>
+      )}
+
+      <section>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <SectionLabel className="mb-2">Subscriber Preview</SectionLabel>
+            <h2
+              className="text-3xl tracking-tight text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Forecasts compared with consensus
+            </h2>
+          </div>
+          <span className="rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-widest text-muted">
+            Locked
+          </span>
+        </div>
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {SUBSCRIBER_CAROUSEL_PREVIEW.map((item) => (
+            <Card
+              key={`${item.variable}-${item.target}`}
+              padding="lg"
+              className="min-w-[310px] max-w-[340px] border-l-4 border-l-accent"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                    {item.target}
+                  </p>
+                  <h3
+                    className="mt-2 text-xl leading-tight text-ink"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {item.variable}
+                  </h3>
+                </div>
+                <span className="rounded-full bg-bg px-3 py-1 text-xs font-semibold text-muted">
+                  Locked
+                </span>
+              </div>
+              <div className="mt-8 space-y-3">
+                {["Consensus", "Institution", "Actual"].map((label, index) => (
+                  <div key={label}>
+                    <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-muted">
+                      <span>{label}</span>
+                      <span>{index === 2 ? "Public" : "Subscriber"}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-bg">
+                      <div
+                        className={`h-full rounded-full ${
+                          index === 0
+                            ? "w-3/4 bg-accent"
+                            : index === 1
+                              ? "w-1/2 bg-signal-orange"
+                              : "w-2/3 bg-ink"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 text-sm leading-6 text-muted">{item.detail}</p>
             </Card>
           ))}
         </div>
@@ -404,17 +573,25 @@ export default async function LandingPage() {
             Built around exact source links
           </h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            {[
-              ["1", "Forecast vintages are preserved."],
-              ["2", "Actual releases stay linked to source documents."],
-              ["3", "Scores record the methodology version used."],
-            ].map(([step, text]) => (
-              <div key={step}>
-                <p className="font-mono text-2xl font-bold text-accent">{step}</p>
-                <p className="mt-2 text-sm leading-6 text-muted">{text}</p>
-              </div>
+            {methodologyNotes.map((note) => (
+              <Link key={note.slug} href={`/methodology/${note.slug}`} className="group">
+                <div className="h-full border-t border-border pt-3">
+                  <p className="text-xs font-bold uppercase tracking-widest text-accent">
+                    {note.tag}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-ink group-hover:text-accent">
+                    {note.title}
+                  </p>
+                </div>
+              </Link>
             ))}
           </div>
+          <Link
+            href="/methodology"
+            className="mt-8 inline-flex text-sm font-semibold text-accent hover:text-accent-dark"
+          >
+            View methodology
+          </Link>
         </Card>
 
         <Card padding="lg" className="bg-bg">
