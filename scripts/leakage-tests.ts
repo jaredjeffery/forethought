@@ -231,6 +231,14 @@ async function main() {
       const consensusResponse = await fetch(`${baseUrl}/api/consensus?variable_id=${sampleConsensus.variableId}`);
       check("public consensus API blocks values", consensusResponse.status === 403, `Expected 403, got ${consensusResponse.status}`);
     }
+
+    const adminResponse = await fetch(`${baseUrl}/admin/data-qa`, { redirect: "manual" });
+    check(
+      "public admin QA page requires auth",
+      [302, 303, 307, 308].includes(adminResponse.status)
+        && (adminResponse.headers.get("location")?.includes("/signin") ?? false),
+      `Expected redirect to signin, got ${adminResponse.status} ${adminResponse.headers.get("location") ?? ""}`,
+    );
   });
 
   assertSourceDoesNotContain(
