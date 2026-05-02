@@ -4,7 +4,7 @@
 
 import { db } from "./db";
 import { forecasters, forecasts, variables, forecastScores } from "./db/schema";
-import { eq, avg, count, sql, and, isNotNull } from "drizzle-orm";
+import { eq, avg, count, countDistinct, sql, and, isNotNull, desc } from "drizzle-orm";
 
 export async function getForecasterBySlug(slug: string) {
   const [forecaster] = await db
@@ -13,6 +13,70 @@ export async function getForecasterBySlug(slug: string) {
     .where(eq(forecasters.slug, slug))
     .limit(1);
   return forecaster ?? null;
+}
+
+export async function getForecasterPublicProfileData(forecasterId: string) {
+  const [summary] = await db
+    .select({
+      forecastCount: countDistinct(forecasts.id),
+      scoredCount: countDistinct(forecastScores.id),
+      variableCount: countDistinct(forecasts.variableId),
+      countryCount: countDistinct(variables.countryCode),
+      latestVintage: sql<string | null>`MAX(${forecasts.vintage})`,
+    })
+    .from(forecasters)
+    .leftJoin(forecasts, eq(forecasts.forecasterId, forecasters.id))
+    .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
+    .leftJoin(variables, eq(variables.id, forecasts.variableId))
+    .where(eq(forecasters.id, forecasterId));
+
+  const coverageByIndicator = await db
+    .select({
+      indicatorName: variables.name,
+      forecastCount: countDistinct(forecasts.id),
+      scoredCount: countDistinct(forecastScores.id),
+      countryCount: countDistinct(variables.countryCode),
+    })
+    .from(forecasts)
+    .innerJoin(variables, eq(forecasts.variableId, variables.id))
+    .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
+    .where(eq(forecasts.forecasterId, forecasterId))
+    .groupBy(variables.name)
+    .orderBy(desc(countDistinct(forecasts.id)), variables.name);
+
+  const coverageByCountry = await db
+    .select({
+      countryCode: variables.countryCode,
+      forecastCount: countDistinct(forecasts.id),
+      scoredCount: countDistinct(forecastScores.id),
+      variableCount: countDistinct(forecasts.variableId),
+    })
+    .from(forecasts)
+    .innerJoin(variables, eq(forecasts.variableId, variables.id))
+    .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
+    .where(eq(forecasts.forecasterId, forecasterId))
+    .groupBy(variables.countryCode)
+    .orderBy(desc(countDistinct(forecasts.id)), variables.countryCode);
+
+  const vintages = await db
+    .selectDistinct({ vintage: forecasts.vintage })
+    .from(forecasts)
+    .where(eq(forecasts.forecasterId, forecasterId))
+    .orderBy(desc(forecasts.vintage))
+    .limit(8);
+
+  return {
+    summary: summary ?? {
+      forecastCount: 0,
+      scoredCount: 0,
+      variableCount: 0,
+      countryCount: 0,
+      latestVintage: null,
+    },
+    coverageByIndicator,
+    coverageByCountry,
+    vintages: vintages.filter((row) => row.vintage != null),
+  };
 }
 
 export async function getForecasterProfileData(forecasterId: string) {
