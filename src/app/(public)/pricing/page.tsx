@@ -86,16 +86,10 @@ export default function PricingPage() {
             what the market thinks now.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/signin"
-              className="inline-flex items-center rounded-[10px] bg-accent px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-dark"
-            >
+            <Link href="/signin" className="btn-primary">
               Request access
             </Link>
-            <Link
-              href="/variables"
-              className="inline-flex items-center rounded-[10px] border border-border px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
-            >
+            <Link href="/variables" className="btn-secondary">
               Browse variables
             </Link>
           </div>
@@ -132,11 +126,7 @@ export default function PricingPage() {
             </ul>
             <Link
               href={plan.href}
-              className={`mt-auto inline-flex justify-center rounded-[10px] px-5 py-3 text-sm font-semibold transition-colors ${
-                plan.featured
-                  ? "bg-accent text-white hover:bg-accent-dark"
-                  : "border border-border text-ink hover:border-accent hover:text-accent"
-              }`}
+              className={`mt-auto justify-center ${plan.featured ? "btn-primary" : "btn-secondary"}`}
             >
               {plan.cta}
             </Link>

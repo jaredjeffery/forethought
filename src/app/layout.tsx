@@ -1,27 +1,29 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Inter, Geist_Mono } from "next/font/google";
+import { Instrument_Serif, DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import SessionProvider from "@/components/SessionProvider";
 
-const playfair = Playfair_Display({
+const instrumentSerif = Instrument_Serif({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["400"],
+  style: ["normal", "italic"],
 });
 
-const inter = Inter({
+const dmSans = DM_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "Forethought",
+  title: "Farfield",
   description: "Performance-tracked marketplace for economic forecasters and analysts.",
 };
 
@@ -30,7 +32,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${playfair.variable} ${inter.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${instrumentSerif.variable} ${dmSans.variable} ${jetbrainsMono.variable} antialiased`}>
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>

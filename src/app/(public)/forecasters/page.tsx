@@ -99,16 +99,18 @@ export default async function ForecastersPage() {
   return (
     <div className="space-y-12">
       <div>
+        <p className="section-label">Directory</p>
         <h1
-          className="text-5xl text-ink tracking-tight"
+          className="mt-3 text-5xl tracking-tight text-ink"
           style={{ fontFamily: "var(--font-display)" }}
         >
           Forecasters
         </h1>
-        <div className="mt-2 h-[3px] w-12 bg-accent" />
+        <span className="accent-rule" />
         <p className="mt-5 max-w-3xl text-base leading-7 text-muted">
-          Farfield tracks public institutional forecasts and shows public coverage signals here.
-          Full accuracy, consensus, and vintage detail stay locked for subscribers.
+          Farfield tracks public institutional forecasts and shows coverage signals on every
+          profile. Detailed accuracy tables, consensus comparisons, and vintage history live
+          behind subscriber access.
         </p>
       </div>
 

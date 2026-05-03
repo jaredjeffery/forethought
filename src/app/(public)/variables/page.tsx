@@ -61,7 +61,7 @@ async function getVariables(country?: string, category?: string) {
 }
 
 const inputClass =
-  "text-sm border border-border rounded-[10px] px-3.5 py-2 bg-surface text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors";
+  "text-sm border border-border-strong rounded-[10px] px-3.5 py-2 bg-surface text-ink focus:border-cobalt focus:outline-none focus:ring-2 focus:ring-cobalt/20 transition-colors";
 
 interface PageProps {
   searchParams: Promise<{ country?: string; category?: string }>;
@@ -74,13 +74,18 @@ export default async function VariablesPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-10">
       <div>
+        <p className="section-label">Directory</p>
         <h1
-          className="text-5xl text-ink tracking-tight"
+          className="mt-3 text-5xl tracking-tight text-ink"
           style={{ fontFamily: "var(--font-display)" }}
         >
           Variables
         </h1>
-        <div className="mt-2 h-[3px] w-12 bg-accent" />
+        <span className="accent-rule" />
+        <p className="mt-4 max-w-2xl text-base leading-7 text-muted">
+          Every tracked variable, with the latest actual reading and a click-through to the
+          full record. Filter by country or category.
+        </p>
       </div>
 
       <form className="flex flex-wrap items-center gap-3">
@@ -96,18 +101,11 @@ export default async function VariablesPage({ searchParams }: PageProps) {
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
-        <button
-          type="submit"
-          className="text-sm font-semibold px-4 py-2 bg-accent text-white rounded-[10px] hover:bg-accent-dark transition-colors duration-200"
-          style={{ boxShadow: "0 1px 3px rgba(29, 78, 216, 0.25)" }}
-        >
+        <button type="submit" className="btn-primary">
           Filter
         </button>
         {(country || category) && (
-          <Link
-            href="/variables"
-            className="text-sm font-medium px-4 py-2 border border-border rounded-[10px] hover:border-accent transition-colors"
-          >
+          <Link href="/variables" className="btn-secondary">
             Clear
           </Link>
         )}
@@ -137,13 +135,13 @@ export default async function VariablesPage({ searchParams }: PageProps) {
                       <td className="px-6 py-4">
                         <Link
                           href={`/variables/${v.slug}`}
-                          className="text-base font-semibold text-ink hover:text-accent transition-colors"
+                          className="text-base font-semibold text-ink transition-colors hover:text-cobalt"
                         >
                           {v.name}
                         </Link>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-semibold tracking-wide text-muted">{v.countryCode}</span>
+                        <span className="font-mono text-sm font-semibold tracking-wide text-muted">{v.countryCode}</span>
                       </td>
                       <td className="px-6 py-4 text-sm text-muted">{v.unit}</td>
                       <td
@@ -151,9 +149,9 @@ export default async function VariablesPage({ searchParams }: PageProps) {
                         style={{ fontFamily: "var(--font-mono)" }}
                       >
                         {latest && val !== null ? (
-                          <span className={val >= 0 ? "text-signal-green font-medium" : "text-signal-red font-medium"}>
+                          <span className={val >= 0 ? "font-semibold text-cobalt" : "font-semibold text-coral"}>
                             {val > 0 ? "+" : ""}{val.toFixed(2)}
-                            <span className="text-muted font-normal ml-2 text-xs">{latest.targetPeriod}</span>
+                            <span className="ml-2 text-xs font-normal text-muted">{latest.targetPeriod}</span>
                           </span>
                         ) : (
                           <span className="text-muted">—</span>

@@ -1,16 +1,17 @@
 ﻿# Farfield — Progress Log
 
-## Claude handoff snapshot — 2026-05-02
+## Claude handoff snapshot — 2026-05-03
 
 Read this before continuing work:
 
 - Primary build reference: `docs/BUILD_PLAN.md`
 - Live execution/status reference: this file, `docs/PROGRESS.md`
 - Current branch: `codex/phase-0-5-data-integrity`
-- Latest pushed commit at handoff: `4a6481c Add methodology subpages`
+- Latest commit at handoff: see `git log -1` (Phase 1 design + content pass committed 2026-05-03)
 - Local dev URL: `http://127.0.0.1:3000`
-- Current phase: Phase 1 public showcase MVP, near completion
-- Current priority: final Phase 1 public-page polish, then decide whether Phase 1 is complete enough to move toward Phase 2 planning
+- Current phase: Phase 1 public showcase MVP, design + content pass complete
+- Current priority: decide remaining Phase 1 data policies (45 WB-coded score fallback rows, World Bank ingestion fate), then move to Phase 2 planning (Stripe billing, premium variable pages, dashboards)
+- Public surface now follows the Farfield Design System (Prism token layer): warm porcelain bg, cobalt primary, Instrument Serif display + DM Sans body + JetBrains Mono numerals, brand lockup in the top-right of the header, prismatic data viz across homepage, variable detail, and forecaster profile pages
 
 ### Current product surface
 
@@ -162,6 +163,71 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 - `d71f7fb` Make homepage editorial first
 - `4921fc0` Add public pricing page
 - `4a6481c` Add methodology subpages
+
+## Session 2026-05-03
+
+### Completed
+
+**Design system applied across the public surface**
+- Rewrote `src/app/globals.css` around the Farfield Design System Prism token layer: warm porcelain `#F7F6F2` bg, cobalt `#2952CC` primary, full Prism palette (cobalt, cyan, violet, coral, amber, teal, marigold, vermilion), light-leak overlays, type scale, spacing/radius/shadow tokens, and reusable component classes (`.card`, `.card-raised`, `.section-label`, `.accent-rule`, `.btn-primary`, `.btn-secondary`, `.badge-*`, `.data-table`, `.prism-backdrop`)
+- Aliased older Tailwind class names (`accent`, `accent-light`, `border-dark`, `signal-green/red/orange`) to the new Prism tokens so existing pages adopted the new look without per-file rewrites
+- Switched fonts in `src/app/layout.tsx` from Playfair / Inter / Geist Mono to Instrument Serif / DM Sans / JetBrains Mono per the design system spec
+- Reworked `src/app/(public)/layout.tsx`: 68px header with nav links on the left, Sign-in pill + Farfield brand lockup on the right; header bg switched to `bg-bg/85` so the lockup PNG blends with the warm page bg
+- Copied the Farfield brand lockup to `public/brand/farfield-lockup.png` for use as the rightmost header element
+
+**Data visualisation primitives added**
+- New `src/components/viz/Sparkline.tsx`: pure SVG sparkline with optional zero baseline and last-point dot
+- New `src/components/viz/ActualsBars.tsx`: divergent bar chart for actuals, latest bar highlighted (cobalt above zero, coral below)
+- New `src/components/viz/CoverageMatrix.tsx`: institutions × variables grid with rotated column headers
+- New `src/components/viz/PrismDial.tsx`: eight-wedge radial signature for institution and forecaster shapes
+- Updated `src/components/ForecastChart.tsx` to use Prism chart-series tokens and added optional dispersion-band rendering for future subscriber views
+- All viz primitives are pure SVG, server-rendered, and never carry forecast or consensus values
+
+**Public homepage rebuilt with prismatic data viz**
+- Replaced the stat strip with a hero panel containing an `ActualsBars` chart of World GDP actuals, latest reading, source label, and link to the variable
+- Added a "Signal Grid" section: six variable cards driven by `Sparkline`
+- Added a "Coverage" panel showing the new `CoverageMatrix` (5 institutions × 12 country×indicator combos)
+- Added an "Institution Signature" panel using `PrismDial` for the top eight institutions weighted by forecasts tracked
+- Kept the editorial structure (lead article, top stories, leading indicators, forecaster spotlight, blog) and re-styled around the new tokens
+
+**Variable and forecaster detail pages rebuilt with viz**
+- `src/app/(public)/variables/[slug]/page.tsx`: hero card with `Sparkline` + delta-vs-prior-period, "At a Glance" `ActualsBars`, full actuals chart, source-breakdown bars, recent-actuals grid, and a subscriber-preview section with a clear list of locked detail
+- `src/app/(public)/forecasters/[slug]/page.tsx`: hero with `PrismDial` indicator signature, four-card public trust panel, coverage-by-indicator with proportional bars, geo-grid heatmap for country coverage, latest vintages, and a subscriber-detail card with `btn-primary` request-access CTA
+
+**Articles and methodology copy rewritten**
+- Replaced the eight launch articles in `src/lib/content.ts` with stronger editorial: oil-prices piece carries twenty-year median absolute errors and revision-quality framing; African-GDP article distinguishes informality vs revisions vs base-year rebases; satellite article cites NDVI correlations and a 2026 watchlist; freight piece carries an explicit pass-through elasticity number; institution spotlight names which institution is best on which slice; "first public record" describes coverage by source and what every row knows about itself; GDP-surprises explainer walks through three different misses with the same headline number; "actuals before rankings" lists three avoidable mistakes most leaderboards make
+- Replaced the three methodology notes with sharper substance: WEO actuals note explains the carrier-vs-authority distinction; consensus note clarifies what consensus actually answers and why snapshots are not averages; leakage-boundary note enumerates allowed/forbidden public fields and how the line is enforced
+- Rewrote `src/components/ArticleVisual.tsx`: each article kind is now a topic-tuned SVG composition (oil dispersion band, Africa GDP vintage-shift bars, satellite NDVI heatmap, leading-indicator dashboard, IMF prism dial, GDP revision-line family, forecast→actual→method linkage diagram, source-record bars)
+
+**Polish across remaining list pages**
+- `src/app/(public)/variables/page.tsx`, `forecasters/page.tsx`, `pricing/page.tsx`: replaced inline button shadow hacks with `btn-primary` / `btn-secondary` classes, swapped header treatments to use `section-label` + `accent-rule`
+
+**Verification**
+- `npx tsc --noEmit` passes
+- `npm run build` clean (29 static pages generated, all routes ≤216 kB First Load JS)
+- `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts` passed after the design pass and again after the header restructure
+- Live preview confirmed token application: body bg `#F7F6F2`, ink `#18181B`, cobalt `#2952CC`, body font DM Sans, hero h1 Instrument Serif
+
+### Current state
+
+- Public surface uses the Farfield Design System token layer end-to-end
+- Header carries the brand lockup in the top right; nav links on the left
+- Homepage, variable detail, and forecaster profile pages all carry first-class data visualisations built from server-rendered SVG primitives
+- Article and methodology copy carries real economic substance and a point of view
+- All Phase 0.5 data integrity guarantees intact: leakage tests pass, no forecast values on public/free pages, no consensus values exposed except where actuals are public
+
+### Known issues
+
+- Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes `auth()` to log a `MissingSecret` warning at runtime in `next dev` mode. Public SSR pages still render; production build and leakage tests use an explicit env load and are unaffected. The user can fix this locally by setting a real AUTH_SECRET in `.env.local`.
+- 45 scores still use World Bank-coded actuals where WEO does not currently provide an unambiguous matching actual (Malaysia/Thailand/India unemployment, Thailand fiscal variables) — unchanged from prior session
+- World Bank ingestion still lacks Phase 0.5 provenance/audit treatment — unchanged from prior session
+
+### Next steps
+
+1. Decide the 45 World Bank-coded score fallback policy (explicit fallback exceptions, data quality flags, or wait for direct national-authority ingestion)
+2. Decide whether World Bank ingestion remains active and either add Phase 0.5 provenance to it or document it as legacy/reference-only
+3. Begin Phase 2 planning: Stripe subscription billing, premium variable pages (consensus as-of, vintage history, dispersion, exports), subscriber dashboard, watchlist
+4. If a transparent-background SVG version of the brand lockup is needed for darker surfaces in future contexts, source one from the design system or commission an update; the current PNG is matched to the warm porcelain bg
 
 ## Session 2026-05-02
 
