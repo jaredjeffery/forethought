@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { subscriptions, users } from "@/lib/db/schema";
 import { and, eq, gt, inArray } from "drizzle-orm";
+import { cookies } from "next/headers";
 
 export type ForecastDataAccess = "public" | "free" | "subscriber" | "admin";
 
@@ -29,6 +30,13 @@ export async function hasActiveSubscription(userId: string) {
 }
 
 export async function getForecastDataAccess(): Promise<ForecastDataAccess> {
+  if (process.env.NODE_ENV === "development") {
+    const cookieStore = await cookies();
+    if (cookieStore.get("farfield-dev-admin")?.value === "1") {
+      return "admin";
+    }
+  }
+
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
 

@@ -72,6 +72,7 @@ Public routes currently implemented:
 - `/api/billing/portal` opens Stripe Billing Portal for users with a linked Stripe customer.
 - `/api/stripe/webhook` verifies Stripe signatures, ignores duplicate events, and syncs subscription state on checkout and customer subscription events.
 - Premium forecast/consensus access now requires an active or trialing subscription with a future current period, or `ADMIN`; `BUYER` role alone no longer unlocks premium data.
+- Local dev now has `/api/dev/admin-login`, which sets a development-only Farfield admin cookie for previewing subscriber/admin UI when Google OAuth or `AUTH_SECRET` is not configured.
 
 ### Premium variable-page state
 
@@ -205,6 +206,12 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 - Added subscriber-side research and request-coverage panels; no locked report cards are shown in the subscriber branch
 - Forced `/variables/[slug]` dynamic to avoid auth-specific premium content being cached into public responses
 
+**Local admin login workaround**
+- Added `/api/dev/admin-login`, enabled only in development or when `ENABLE_DEV_ADMIN_LOGIN=1`, to create a local admin session and set a `farfield-dev-admin` cookie
+- Added a "Continue as dev admin" button on `/signin` when the workaround is enabled
+- Updated premium forecast access to trust the local dev admin cookie only in development before falling back to Auth.js/subscription checks
+- Verified the dev admin cookie shows the `Subscriber Forecast View` on `/variables/gdp-growth-rate-usa`
+
 **World Bank actuals fallback retired**
 - Updated `src/lib/scoring/index.ts` so core macro scoring excludes World Bank actuals instead of using them as a fallback when WEO is missing
 - Added `scripts/retire-world-bank-score-fallbacks.ts` as a one-off cleanup script for any environment that still has score rows linked to World Bank actuals
@@ -265,7 +272,7 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 
 ### Known issues
 
-- Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes `auth()` to log a `MissingSecret` warning at runtime in `next dev` mode. Public SSR pages still render; production build and leakage tests use an explicit env load and are unaffected. The user can fix this locally by setting a real AUTH_SECRET in `.env.local`.
+- Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes Auth.js/Google OAuth to fail. For now, use `/api/dev/admin-login?callbackUrl=/variables/gdp-growth-rate-usa` or the "Continue as dev admin" button on `/signin` to preview admin/subscriber UI. A real `AUTH_SECRET` should still be added before relying on OAuth.
 - Stripe checkout/portal require real `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_SUBSCRIBER_PRICE_ID` values before they can be tested end-to-end against Stripe.
 - "My forecasters" is an empty/disabled premium variable chart layer until forecaster subscription/product entitlement tables exist in Phase 3.
 - The research panel currently uses static Farfield editorial matching heuristics; report/product-backed research feeds need the content/marketplace schema later.

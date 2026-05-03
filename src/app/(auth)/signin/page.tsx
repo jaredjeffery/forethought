@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Sign in — Forethought",
+  title: "Sign in — Farfield",
 };
 
 export default async function SignInPage({
@@ -16,10 +16,13 @@ export default async function SignInPage({
 }) {
   const session = await auth();
   const params = await searchParams;
+  const devAdminLoginEnabled =
+    process.env.NODE_ENV === "development" || process.env.ENABLE_DEV_ADMIN_LOGIN === "1";
+  const callbackUrl = params.callbackUrl ?? "/variables/gdp-growth-rate-usa";
 
   // Already signed in — redirect
   if (session?.user) {
-    redirect(params.callbackUrl ?? "/dashboard");
+    redirect(callbackUrl);
   }
 
   return (
@@ -27,7 +30,7 @@ export default async function SignInPage({
       <header className="border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center">
           <Link href="/" className="text-sm font-semibold tracking-tight">
-            Forethought
+            Farfield
           </Link>
         </div>
       </header>
@@ -53,7 +56,7 @@ export default async function SignInPage({
             action={async () => {
               "use server";
               await signIn("google", {
-                redirectTo: params.callbackUrl ?? "/dashboard",
+                redirectTo: callbackUrl,
               });
             }}
           >
@@ -65,6 +68,15 @@ export default async function SignInPage({
               Continue with Google
             </button>
           </form>
+
+          {devAdminLoginEnabled && (
+            <Link
+              href={`/api/dev/admin-login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+              className="mt-3 flex w-full items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-100"
+            >
+              Continue as dev admin
+            </Link>
+          )}
 
           <p className="mt-8 text-xs text-gray-400 text-center">
             By signing in you agree to our terms of service and privacy policy.
