@@ -1,12 +1,12 @@
-# Forethought — Public Macro Forecast Gathering Plan
+﻿# Farfield — Public Macro Forecast Gathering Plan
 
 Companion to `BUILD_PLAN.md` and `public_macro_forecast_sources.xlsx`.
 
-Last updated: 2026-04-20.
+Last updated: 2026-05-03.
 
 ## Purpose
 
-Define how Forethought will (a) assemble an initial back-catalogue of public institutional forecasts for scoring and consensus, (b) keep that catalogue current on an ongoing release cadence, and (c) map forecasts to actuals in a way that is defensible and version-stable.
+Define how Farfield will (a) assemble an initial back-catalogue of public institutional forecasts for scoring and consensus, (b) keep that catalogue current on an ongoing release cadence, and (c) map forecasts to actuals in a way that is defensible and version-stable.
 
 The plan is scoped to deliver the Phase 1 Forecast Observatory described in `BUILD_PLAN.md` §1 and to prepare rails for Phase 2 expansion.
 
@@ -20,6 +20,16 @@ Build the cheapest complete pipeline first, then add sources in descending order
 
 Distinguish between first-release actuals (for pure out-of-sample scoring) and benchmark-revised actuals (for retrospective analytical work). Publish the policy on which is used for scoring, per `BUILD_PLAN.md` §4.2.
 
+### Actuals source hierarchy
+
+IMF WEO is the default carrier for actuals in the core cross-country macro panel until a direct national-authority pipeline exists for a specific variable and country. The authority is not "IMF says so"; it is the WEO row-level metadata showing that the observation is historical/actual and, where available, sourced from the relevant national authority. A WEO observation may be inserted as an actual only when those metadata fields support that classification. The ingestion code should preserve the relevant WEO source/status metadata and source-document provenance; it should not infer actuals from target year alone unless that fallback is documented on the ingestion run.
+
+Direct national authority data supersedes WEO for that variable and country once Farfield has an auditable ingestion path for the original release. Examples: Stats SA for South Africa GDP/CPI, BEA/BLS for US GDP/CPI/unemployment, ONS for UK data, Eurostat/ECB for euro-area aggregates. When this happens, preserve the older WEO actual vintages and record the migration in variable metadata or data-quality notes.
+
+Secondary compilers such as World Bank Indicators are not the default actuals source for WEO/OECD/ECB forecast scoring. They may be used for source discovery, sanity checks, variables deliberately defined around a World Bank indicator, or temporary diagnostics, but they should not replace WEO/national-authority actuals for the core macro scorecard without an explicit methodology decision. As of 2026-05-03, the settled scoring rule is stricter: World Bank Indicators are legacy/reference-only for the core macro scorecard, and forecasts without an eligible WEO-carried or direct national-authority actual should remain unscored.
+
+Every actual inserted by an ingestion script must carry `source`, `source_vintage`, `vintage_date`, and, once Phase 0.5 provenance is wired through ingestion, `source_document_id`. If the source was accepted through a temporary exception, attach a `data_quality_flags` row before publication.
+
 ## Ingestion wave plan
 
 ### Wave 1 — "IMF WEO end-to-end" (already underway, complete by end of Phase 1 month 2)
@@ -28,7 +38,7 @@ IMF WEO is the spine. It gives global and country-level forecasts across GDP, CP
 
 Tasks for Wave 1: finalise the vintage-aware ingestion for all 11 already-downloaded WEO releases; normalise variable codes against the platform taxonomy; resolve fiscal-vs-calendar-year target period metadata; build the scoring engine against this single source; publish scoring for at least two variables (headline GDP growth and CPI) across the full country panel. This is the "walking skeleton" for everything that follows.
 
-Actuals for Wave 1: IMF WEO itself as a provisional source of truth. A "WEO-scored-against-WEO" note in the methodology is acceptable so long as it is transparent and the plan to graduate onto national-stats-office actuals in Wave 3 is stated publicly.
+Actuals for Wave 1: WEO-carried national-authority/historical observations as the provisional source of truth, using WEO metadata to identify observations that are historical/actual and, where available, national-authority-sourced. A "WEO-carried actuals" note in the methodology is acceptable so long as it is transparent and the plan to graduate onto direct national-stats-office ingestion in Wave 3 is stated publicly. World Bank Indicators should not be used as the default substitute for WEO actuals in this wave.
 
 ### Wave 2 — "Major multilaterals + Eurosystem anchor" (Phase 1 months 2–3, into early Phase 2)
 
@@ -50,7 +60,7 @@ Fed SEP, ECB/Eurosystem projections, BoE MPR. Central-bank official views for th
 
 ### Wave 3 — "Actuals migration + the South Africa wedge" (early Phase 2)
 
-Replace provisional WEO-as-actuals with country-authoritative sources for the countries where Forethought wants to compete hardest. Priority:
+Replace provisional WEO-as-actuals with country-authoritative sources for the countries where Farfield wants to compete hardest. Priority:
 
 South Africa — Stats SA for GDP and CPI, SARS + National Treasury for fiscal, SARB for BOP/monetary aggregates. All public and well-documented. Since SA is Jared's stated wedge, actuals quality matters more here than anywhere else.
 
@@ -90,7 +100,7 @@ Energy and commodities also open a useful Phase 2 revenue angle: commodity desks
 
 ING, BBVA, SEB, Nordea, Danske, ABN AMRO, Scotiabank, Desjardins. Useful for breadth and for triangulation. Three reasons to defer:
 
-1. Terms of use for redistribution need per-publisher review; safer to approach once Forethought has a verified-forecaster legal template.
+1. Terms of use for redistribution need per-publisher review; safer to approach once Farfield has a verified-forecaster legal template.
 2. Forecasts are often published on rolling web pages without stable vintages; requires a scrape-and-archive-at-release pipeline that is heavier than one-off parsing.
 3. Commercial banks are also candidate analyst customers; scoring them unilaterally is a commercial risk that is better navigated after the platform's methodology has public credibility from Wave 1–2 institutions.
 
@@ -126,23 +136,48 @@ For each source, document archive URL, file-pattern for vintage lookup, and any 
 
 Policy per `BUILD_PLAN.md` §4.2: scoring uses first-release actuals by default; benchmark-revised actuals available on the scoring page as an alternate view. Mapping:
 
-GDP real growth: national stats office first-release; IMF WEO provisional for countries without clean first-release archives.
+GDP real growth: WEO-carried actuals for the cross-country panel when WEO metadata marks the observation as actual/historical and, where available, national-authority-sourced; national stats office first-release once a direct source-specific ingestion exists.
 
-CPI inflation: national stats office; ECB SDW / Eurostat for euro-area aggregates.
+CPI inflation: WEO-carried actuals for the cross-country panel when WEO metadata marks the observation as actual/historical and, where available, national-authority-sourced; national stats office once direct ingestion exists; ECB SDW / Eurostat for euro-area aggregates.
 
-Unemployment: national stats office (BLS, ONS, Eurostat, Stats SA, etc.).
+Unemployment: WEO-carried actuals for the cross-country panel where WEO metadata supports actual classification; national stats office once direct ingestion exists (BLS, ONS, Eurostat, Stats SA, etc.).
 
 Policy rate: central bank series, end-of-period.
 
-Fiscal balance (% GDP): national treasury / finance ministry for fiscal-year figures; IMF WEO for cross-country panel consistency.
+Fiscal balance (% GDP): WEO-carried actuals for cross-country panel consistency when metadata supports actual classification; national treasury / finance ministry for fiscal-year figures once directly ingested.
 
-Current account (% GDP): central bank BOP releases; IMF IFS / WEO as fallback.
+Current account (% GDP): WEO-carried actuals for the cross-country panel when metadata supports actual classification; central bank BOP releases once directly ingested; IMF IFS only if explicitly adopted as a source-specific actuals pipeline.
 
 Exchange rates: central bank / BIS for end-of-period and average; document daily fixing source per currency.
 
 Oil prices (Brent, WTI): EIA first-release for monthly average.
 
-For every scored variable, a `source_for_actuals` field in the `variables` table names the authoritative source. Wave 3 is the migration from IMF-provisional to national sources; variables table records the migration date to preserve audit trail.
+World Bank Indicators: not an authoritative actuals source for the core macro scorecard unless a variable is explicitly defined as a World Bank-indicator variable. Use World Bank data for forecast sources such as GEP, source discovery, or QA cross-checks unless methodology explicitly approves otherwise. Do not use World Bank Indicators as a scoring fallback for WEO/OECD/ECB macro forecasts.
+
+For every scored variable, a `source_for_actuals` field in the `variables` table names the authoritative source. During Phase 0.5 and Wave 1 this should normally be WEO-carried national-authority/historical observations for the core macro panel, not World Bank. Wave 3 is the migration from WEO-carried actuals to direct national sources; variables table records the migration date to preserve audit trail.
+
+## Implementation guardrails
+
+Ingestion scripts must separate forecast rows from actual rows using source metadata before writing to the database. For WEO, the parser should preserve the relevant status/source fields from the WEO file and only insert an actual when that metadata supports treating the observation as actual.
+
+Do not create or refresh core macro actuals from a secondary compiler just because the API is easier to query. If a secondary source is temporarily used, the ingestion run must record the exception, the affected variables, and the replacement plan.
+
+Scoring jobs should prefer actuals whose `source_for_actuals` matches the variable's current policy. If multiple actual sources exist for the same variable and period, the selected score must link to the exact actual vintage used, and alternate-source comparisons should remain clearly separated.
+
+Minimal QA before publishing scores: verify source counts by actuals provider, sample a few country-year observations against source metadata, and flag any variable-period where the actual source differs from the variable policy.
+
+## Settled World Bank actuals policy
+
+Existing database state includes individual-country actuals imported from World Bank Indicators. Those rows are legacy reference/QA data, not the scoring baseline for the core macro scorecard.
+
+Settled rules:
+
+1. IMF WEO ingestion inserts WEO-carried historical/actual observations only when WEO metadata supports treating them as actuals for individual-country variables.
+2. WEO actuals must retain source-document provenance and enough metadata to explain why the row was treated as an actual.
+3. World Bank Indicators must not be used as the default or fallback actuals provider for core macro variables.
+4. Forecasts without an eligible WEO-carried or direct national-authority actual remain unscored.
+5. Existing World Bank actual rows may remain in the database only for World Bank-defined variables, reference checks, source discovery, or QA comparison.
+6. `scripts/qa-actuals-sources.ts` in strict mode must fail if any `forecast_scores` row links to a World Bank actual.
 
 ## Cadence automation
 
@@ -168,7 +203,9 @@ Action: add a `redistribution_reviewed_at` and `redistribution_terms_verified_by
 
 ## How this plan maps to BUILD_PLAN phases
 
-Phase 1 (BUILD_PLAN §1.1): Waves 1 and 2.
+Phase 0.5 (BUILD_PLAN §1.1): source-document provenance, ingestion-run audit records, variable-source mappings, actuals-source QA, and leakage tests around forecast/consensus data.
+
+Phase 1 (BUILD_PLAN §1.1): Waves 1 and 2, with public pages showing actuals-only previews, source labels, coverage counts, and locked premium modules.
 
 Phase 2 (BUILD_PLAN §1.1 Phase 2): Waves 3, 4, and Wave 5 if commodity demand materialises.
 
@@ -178,6 +215,6 @@ Phase 3: Wave 6 plus Wave-4 long-tail.
 
 How much SA revenue-data vs IMF-data reconciliation work is necessary up front vs ongoing? A two-hour spike is probably enough to answer.
 
-Should Forethought publish a separate "SA Forecast Scorecard" as content ahead of broader launch? This fits Jared's editorial workstream (BUILD_PLAN §1.7) and exercises the full vintage-aware scoring pipeline on a constrained scope.
+Should Farfield publish a separate "SA Forecast Scorecard" as content ahead of broader launch? This fits Jared's editorial workstream (BUILD_PLAN §1.7) and exercises the full vintage-aware scoring pipeline on a constrained scope.
 
 Is there value in reaching out to SARB or SA Treasury ahead of ingestion for an informal heads-up about the platform? This is a relationship question more than a legal one; public data is fair to use, but goodwill matters when the platform later wants named analyst collaborators.

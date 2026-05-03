@@ -10,7 +10,7 @@ Read this before continuing work:
 - Latest commit at handoff: see `git log -1` (Phase 1 design + content pass committed 2026-05-03)
 - Local dev URL: `http://127.0.0.1:3000`
 - Current phase: Phase 1 public showcase MVP, design + content pass complete
-- Current priority: decide remaining Phase 1 data policies (45 WB-coded score fallback rows, World Bank ingestion fate), then move to Phase 2 planning (Stripe billing, premium variable pages, dashboards)
+- Current priority: Phase 2 planning (Stripe billing, premium variable pages, dashboards). The World Bank actuals fallback question is settled.
 - Public surface now follows the Farfield Design System (Prism token layer): warm porcelain bg, cobalt primary, Instrument Serif display + DM Sans body + JetBrains Mono numerals, brand lockup in the top-right of the header, prismatic data viz across homepage, variable detail, and forecaster profile pages
 
 ### Current product surface
@@ -53,17 +53,14 @@ Public routes currently implemented:
 
 ### Data/scoring state
 
-- Current DB uses WEO-carried national-authority/historical observations as the preferred actuals baseline for core macro scoring where available.
+- Current DB uses WEO-carried national-authority/historical observations as the active actuals baseline for core macro scoring where available.
 - WEO 2026-Apr ingestion was rerun after parser fixes.
 - WEO is now the scoring actual for 5,906 scored rows.
-- World Bank-coded scoring fallback is down to 45 rows.
-- Remaining 45 fallback rows are narrow cases where WEO does not currently provide an unambiguous matching actual under current rules:
-  - Malaysia/Thailand/India unemployment
-  - Thailand fiscal variables
+- World Bank-coded scoring fallback is retired: 0 `forecast_scores` rows use World Bank actuals.
+- Existing World Bank actual rows remain only as legacy reference/QA data unless a future variable is explicitly defined around a World Bank indicator.
+- Forecasts without an eligible WEO-carried or direct national-authority actual remain unscored rather than falling back to World Bank Indicators.
 - OECD and ECB ingestion now records provenance metadata.
-- World Bank ingestion still needs a decision:
-  - either wire it into Phase 0.5 provenance/audit tables if it remains active, or
-  - mark it legacy/reference-only for core macro scoring.
+- World Bank GEP forecast ingestion may still be used as a forecast source, but World Bank Indicators are legacy/reference-only for core macro actuals.
 
 ### Verification commands
 
@@ -86,6 +83,7 @@ Recent verification status:
 
 - `npx tsc --noEmit` passes
 - `npm run build` passes
+- `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-actuals-sources.ts` passes with 0 World Bank-backed score rows
 - strict data QA passes with 0 attention runs, 0 running imports, 0 open quality flags, 0 score reference issues, 0 latest source docs missing hashes, and 0 latest source docs without linked rows
 - leakage tests pass against the built app and current database
 
@@ -115,27 +113,21 @@ Public pages may show:
 
 ### Next recommended steps
 
-1. Final Phase 1 public-page polish pass:
+1. Prepare Phase 2 planning:
+   - Stripe subscription billing
+   - subscriber access checks
+   - premium variable pages
+   - consensus as-of charts
+   - vintage history
+   - exports/downloads
+   - dashboard/watchlist
+2. Final Phase 1 public-page polish pass:
    - Homepage: tune editorial spacing/order after browser review
    - Articles: decide whether mock content is enough for Phase 1 or should be pared down
    - Variables: make locked premium modules and pricing CTA feel consistent
    - Forecasters: review profiles for profile text, trust panels, and non-leaky coverage presentation
    - Methodology/pricing: quick copy polish and link audit
-2. Decide the 45 World Bank-coded score fallback policy:
-   - keep as explicit fallback exceptions,
-   - convert to data quality flags,
-   - or wait for direct national-authority ingestion.
-3. Decide whether World Bank ingestion remains active:
-   - if yes, add Phase 0.5 provenance/audit support to it;
-   - if no, document it as legacy/reference-only for core macro scoring.
-4. If Phase 1 is accepted, prepare Phase 2 planning:
-   - Stripe subscription billing,
-   - subscriber access checks,
-   - premium variable pages,
-   - consensus as-of charts,
-   - vintage history,
-   - exports/downloads,
-   - dashboard/watchlist.
+3. If World Bank GEP forecast ingestion remains active, add Phase 0.5 provenance/audit support to that forecast pipeline only; do not revive World Bank Indicators as a macro actuals fallback.
 
 ### Worktree warning
 
@@ -167,6 +159,14 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 ## Session 2026-05-03
 
 ### Completed
+
+**World Bank actuals fallback retired**
+- Updated `src/lib/scoring/index.ts` so core macro scoring excludes World Bank actuals instead of using them as a fallback when WEO is missing
+- Added `scripts/retire-world-bank-score-fallbacks.ts` as a one-off cleanup script for any environment that still has score rows linked to World Bank actuals
+- Updated `scripts/qa-actuals-sources.ts` so `QA_STRICT=1` fails if any `forecast_scores` row links to a World Bank actual
+- Ran the cleanup script against the configured database; it found no remaining World Bank-backed score rows in the current DB
+- Verified strict actual-source QA: 5,906 scored rows use `IMF-WEO`, 0 scored rows use World Bank actuals
+- Updated `docs/BUILD_PLAN.md` and `docs/FORECAST_GATHERING_PLAN.md` to mark World Bank Indicators as legacy/reference-only for core macro actuals
 
 **Design system applied across the public surface**
 - Rewrote `src/app/globals.css` around the Farfield Design System Prism token layer: warm porcelain `#F7F6F2` bg, cobalt `#2952CC` primary, full Prism palette (cobalt, cyan, violet, coral, amber, teal, marigold, vermilion), light-leak overlays, type scale, spacing/radius/shadow tokens, and reusable component classes (`.card`, `.card-raised`, `.section-label`, `.accent-rule`, `.btn-primary`, `.btn-secondary`, `.badge-*`, `.data-table`, `.prism-backdrop`)
@@ -219,15 +219,14 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 ### Known issues
 
 - Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes `auth()` to log a `MissingSecret` warning at runtime in `next dev` mode. Public SSR pages still render; production build and leakage tests use an explicit env load and are unaffected. The user can fix this locally by setting a real AUTH_SECRET in `.env.local`.
-- 45 scores still use World Bank-coded actuals where WEO does not currently provide an unambiguous matching actual (Malaysia/Thailand/India unemployment, Thailand fiscal variables) — unchanged from prior session
-- World Bank ingestion still lacks Phase 0.5 provenance/audit treatment — unchanged from prior session
+- World Bank-coded score fallback is retired: strict actual-source QA now reports 0 `forecast_scores` rows using World Bank actuals.
+- World Bank GEP forecast ingestion still lacks Phase 0.5 provenance/audit treatment if it remains active, but World Bank Indicators are legacy/reference-only for core macro actuals.
 
 ### Next steps
 
-1. Decide the 45 World Bank-coded score fallback policy (explicit fallback exceptions, data quality flags, or wait for direct national-authority ingestion)
-2. Decide whether World Bank ingestion remains active and either add Phase 0.5 provenance to it or document it as legacy/reference-only
-3. Begin Phase 2 planning: Stripe subscription billing, premium variable pages (consensus as-of, vintage history, dispersion, exports), subscriber dashboard, watchlist
-4. If a transparent-background SVG version of the brand lockup is needed for darker surfaces in future contexts, source one from the design system or commission an update; the current PNG is matched to the warm porcelain bg
+1. Begin Phase 2 planning: Stripe subscription billing, premium variable pages (consensus as-of, vintage history, dispersion, exports), subscriber dashboard, watchlist
+2. Add Phase 0.5 provenance to World Bank GEP forecast ingestion only if that source remains active
+3. If a transparent-background SVG version of the brand lockup is needed for darker surfaces in future contexts, source one from the design system or commission an update; the current PNG is matched to the warm porcelain bg
 
 ## Session 2026-05-02
 

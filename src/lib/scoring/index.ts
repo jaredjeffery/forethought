@@ -17,6 +17,9 @@
 //
 // Scoring policy:
 //   - Always scores against the first-release actual (release_number = 1).
+//   - World Bank actuals are legacy/reference-only for core macro scoring.
+//     Use WEO-carried national-authority/historical actuals where available;
+//     otherwise leave the forecast unscored until a better actual source exists.
 //   - Stores actual_id, methodology_version ("v1.0"), and horizon_months on
 //     every score row for traceability and analysis.
 
@@ -27,14 +30,14 @@ import { eq, and, isNull, sql, desc } from "drizzle-orm";
 const ACTUAL_SOURCE_PRIORITY = sql`
   CASE
     WHEN ${actuals.source} = 'IMF-WEO' THEN 0
-    WHEN ${actuals.source} LIKE 'World Bank%' THEN 2
     ELSE 1
   END
 `;
 
+const SCORING_ACTUAL_SOURCE_FILTER = sql`${actuals.source} NOT LIKE 'World Bank%'`;
+
 function actualSourceRank(source: string): number {
   if (source === "IMF-WEO") return 0;
-  if (source.startsWith("World Bank")) return 2;
   return 1;
 }
 
@@ -150,7 +153,8 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
       and(
         eq(actuals.variableId, forecast.variableId),
         eq(actuals.targetPeriod, forecast.targetPeriod),
-        eq(actuals.releaseNumber, 1)
+        eq(actuals.releaseNumber, 1),
+        SCORING_ACTUAL_SOURCE_FILTER
       )
     )
     .orderBy(ACTUAL_SOURCE_PRIORITY, actuals.publishedAt)
@@ -175,7 +179,8 @@ export async function scoreForecast(forecastId: string): Promise<boolean> {
         and(
           eq(actuals.variableId, forecast.variableId),
           eq(actuals.targetPeriod, priorYear),
-          eq(actuals.releaseNumber, 1)
+          eq(actuals.releaseNumber, 1),
+          SCORING_ACTUAL_SOURCE_FILTER
         )
       )
       .orderBy(ACTUAL_SOURCE_PRIORITY, actuals.publishedAt)
@@ -254,7 +259,8 @@ export async function scoreAllPending(): Promise<{ scored: number; skipped: numb
       and(
         eq(actuals.variableId, forecasts.variableId),
         eq(actuals.targetPeriod, forecasts.targetPeriod),
-        eq(actuals.releaseNumber, 1)
+        eq(actuals.releaseNumber, 1),
+        SCORING_ACTUAL_SOURCE_FILTER
       )
     )
     .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
@@ -303,7 +309,7 @@ export async function rescoreAll(): Promise<{ scored: number; skipped: number }>
       publishedAt: actuals.publishedAt,
     })
     .from(actuals)
-    .where(eq(actuals.releaseNumber, 1));
+    .where(and(eq(actuals.releaseNumber, 1), SCORING_ACTUAL_SOURCE_FILTER));
   const actualByKey = new Map<string, { id: string; value: number; source: string; publishedAt: Date }>();
   for (const a of allActuals) {
     const key = `${a.variableId}|${a.targetPeriod}`;

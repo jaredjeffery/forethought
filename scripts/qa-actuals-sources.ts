@@ -2,7 +2,7 @@
 
 import { db } from "../src/lib/db";
 import { actuals, forecastScores, variables } from "../src/lib/db/schema";
-import { count, desc, eq, sql } from "drizzle-orm";
+import { count, desc, eq, like } from "drizzle-orm";
 
 async function main() {
   const bySource = await db
@@ -39,7 +39,7 @@ async function main() {
     .from(forecastScores)
     .innerJoin(actuals, eq(forecastScores.actualId, actuals.id))
     .innerJoin(variables, eq(actuals.variableId, variables.id))
-    .where(sql`${actuals.source} LIKE 'World Bank%'`)
+    .where(like(actuals.source, "World Bank%"))
     .groupBy(variables.name, variables.countryCode)
     .orderBy(desc(count(forecastScores.id)))
     .limit(20);
@@ -59,11 +59,19 @@ async function main() {
     console.log(`${row.source.padEnd(36)} ${String(row.n).padStart(6)}`);
   }
 
+  console.log("\n=== World Bank actuals policy ===");
+  console.log("World Bank actuals are legacy/reference-only and should not back forecast_scores.");
+
   if (worldBankScored.length > 0) {
-    console.log("\n=== Remaining World Bank-scored core rows (top 20) ===");
+    console.log("\n=== World Bank-scored rows requiring retirement (top 20) ===");
     for (const row of worldBankScored) {
       console.log(`${row.variableName.padEnd(28)} ${row.countryCode.padEnd(4)} ${String(row.n).padStart(6)}`);
     }
+    if (process.env.QA_STRICT === "1") {
+      throw new Error("World Bank actuals are still used by forecast_scores.");
+    }
+  } else {
+    console.log("No forecast_scores rows use World Bank actuals.");
   }
 
   process.exit(0);

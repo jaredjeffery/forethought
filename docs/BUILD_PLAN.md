@@ -6,7 +6,7 @@ This is a comprehensive technical and product specification for building Farfiel
 
 The builder has deep domain expertise (Oxford Economics, S&P Global) and will be developing the platform primarily using Claude Code, with support from developer friends as complexity increases. The plan prioritises getting to a functional, near-production-quality product that can be seeded with publicly available forecast data before forecaster recruitment begins.
 
-**Current execution note for Claude/Codex:** this file is the product and technical build plan. For live implementation status, read `docs/PROGRESS.md` first, especially the latest "Claude handoff snapshot" section. As of the 2026-05-03 snapshot, Phase 0.5 is implemented, the Phase 1 design/content pass is complete, and the next recommended work is resolving the remaining actual-source fallback policy before Phase 2 planning.
+**Current execution note for Claude/Codex:** this file is the product and technical build plan. For live implementation status, read `docs/PROGRESS.md` first, especially the latest "Claude handoff snapshot" section. As of the 2026-05-03 snapshot, Phase 0.5 is implemented, the Phase 1 design/content pass is complete, and the World Bank actuals fallback question is settled: World Bank Indicators are legacy/reference-only for core macro scoring, while WEO-carried national-authority/historical actuals remain the active baseline until direct national-authority pipelines exist. The next recommended work is Phase 2 planning.
 
 ---
 
