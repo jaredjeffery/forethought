@@ -6,7 +6,7 @@ This is a comprehensive technical and product specification for building Farfiel
 
 The builder has deep domain expertise (Oxford Economics, S&P Global) and will be developing the platform primarily using Claude Code, with support from developer friends as complexity increases. The plan prioritises getting to a functional, near-production-quality product that can be seeded with publicly available forecast data before forecaster recruitment begins.
 
-**Current execution note for Claude/Codex:** this file is the product and technical build plan. For live implementation status, read `docs/PROGRESS.md` first, especially the "Claude handoff snapshot — 2026-05-02" section. As of that snapshot, Phase 0.5 is implemented and Phase 1 is near completion; the next recommended work is public-page polish and resolving the remaining actual-source fallback policy.
+**Current execution note for Claude/Codex:** this file is the product and technical build plan. For live implementation status, read `docs/PROGRESS.md` first, especially the latest "Claude handoff snapshot" section. As of the 2026-05-03 snapshot, Phase 0.5 is implemented, the Phase 1 design/content pass is complete, and the next recommended work is resolving the remaining actual-source fallback policy before Phase 2 planning.
 
 ---
 
