@@ -37,8 +37,22 @@ export async function getForecastDataAccess(): Promise<ForecastDataAccess> {
     }
   }
 
-  const session = await auth();
-  const userId = (session?.user as { id?: string } | undefined)?.id;
+  let rawSession: unknown = null;
+  try {
+    rawSession = await auth();
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "Auth.js session lookup failed; treating request as public access in development.",
+        error,
+      );
+      return "public";
+    }
+    throw error;
+  }
+
+  const session = rawSession as { user?: { id?: unknown } } | null;
+  const userId = typeof session?.user?.id === "string" ? session.user.id : undefined;
 
   if (!userId) return "public";
 

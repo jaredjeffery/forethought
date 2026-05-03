@@ -10,8 +10,13 @@ Read this before continuing work:
 - Latest commit at handoff: see `git log -1` (Phase 1 design + content pass committed 2026-05-03)
 - Local dev URL: `http://127.0.0.1:3000`
 - Current phase: Phase 2 subscriber data product, billing/access foundation implemented
-- Current priority: review and iterate the Phase 2.2 premium variable-page first draft, then add exports and dashboard/watchlist
+- Current priority: refactor the Phase 2.2 variable page into a single chart workbench with top-forecaster scoring near the top, start/end date controls, and plan-aware chart layers; then add exports and dashboard/watchlist
 - Public surface now follows the Farfield Design System (Prism token layer): warm porcelain bg, cobalt primary, Instrument Serif display + DM Sans body + JetBrains Mono numerals, brand lockup in the top-right of the header, prismatic data viz across homepage, variable detail, and forecaster profile pages
+
+Latest update:
+
+- Removed the `Recent Actuals` card grid from `/variables/[slug]`; actual values should be discovered through chart hover/tooltips, with CSV export as the subscriber path for tabular data.
+- `getForecastDataAccess()` now fails closed to public access in local development if Auth.js cannot initialize because `AUTH_SECRET` is missing, so public variable pages do not 500 during local preview.
 
 ### Current product surface
 
@@ -84,6 +89,7 @@ Public routes currently implemented:
 - Public institution series come from institutional forecaster rows for that variable. "My forecasters" is present as a disabled/empty layer until forecaster subscription/product entitlement tables exist.
 - The subscriber branch adds a "Research on this variable" panel using existing Farfield editorial and a "Request coverage" action.
 - Public users still see only the public subscriber preview; no premium forecast/consensus values are queried for public requests.
+- The previous `Recent Actuals` card grid has been removed to keep the variable page chart-led rather than duplicating values in a space-heavy table-like layout.
 
 ### Verification commands
 
@@ -106,6 +112,7 @@ Recent verification status:
 
 - `npx tsc --noEmit` passes
 - `npm run build` passes
+- `http://127.0.0.1:3000/variables/gdp-growth-rate-usa` renders without the `Recent Actuals` section after the local Auth.js development fallback
 - `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-subscription-access.ts` passes
 - `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-actuals-sources.ts` passes with 0 World Bank-backed score rows
 - strict data QA passes with 0 attention runs, 0 running imports, 0 open quality flags, 0 score reference issues, 0 latest source docs missing hashes, and 0 latest source docs without linked rows

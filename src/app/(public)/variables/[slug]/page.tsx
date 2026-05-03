@@ -373,33 +373,6 @@ export default async function VariableDetailPage({ params }: PageProps) {
         </Card>
       </section>
 
-      {/* RECENT ACTUALS GRID */}
-      {sortedActuals.length > 0 && (
-        <section>
-          <SectionLabel>Recent Actuals</SectionLabel>
-          <div className="grid gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
-            {sortedActuals.slice(-14).reverse().map((a) => {
-              const val = parseFloat(a.value);
-              return (
-                <div key={a.id} className="card px-4 py-3 text-center">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
-                    {a.targetPeriod}
-                  </p>
-                  <p
-                    className={`mt-2 font-mono text-base font-bold tabular-nums ${
-                      val >= 0 ? "text-cobalt" : "text-coral"
-                    }`}
-                  >
-                    {val > 0 ? "+" : ""}
-                    {val.toFixed(1)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
       {premiumData && (
         <>
           <section>
