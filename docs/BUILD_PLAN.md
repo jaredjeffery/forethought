@@ -6,7 +6,7 @@ This is a comprehensive technical and product specification for building Farfiel
 
 The builder has deep domain expertise (Oxford Economics, S&P Global) and will be developing the platform primarily using Claude Code, with support from developer friends as complexity increases. The plan prioritises getting to a functional, near-production-quality product that can be seeded with publicly available forecast data before forecaster recruitment begins.
 
-**Current execution note for Claude/Codex:** this file is the product and technical build plan. For live implementation status, read `docs/PROGRESS.md` first, especially the latest "Claude handoff snapshot" section. As of the 2026-05-03 snapshot, Phase 0.5 is implemented, the Phase 1 design/content pass is complete, the World Bank actuals fallback question is settled, and Phase 2.1 subscription billing/access foundations are implemented. The next recommended work is Phase 2.2 premium variable pages.
+**Current execution note for Claude/Codex:** this file is the product and technical build plan. For live implementation status, read `docs/PROGRESS.md` first, especially the latest "Claude handoff snapshot" section. As of the 2026-05-03 snapshot, Phase 0.5 is implemented, the Phase 1 design/content pass is complete, the World Bank actuals fallback question is settled, Phase 2.1 subscription billing/access foundations are implemented, and the first Phase 2.2 premium variable-page draft is live behind subscriber/admin access. The next recommended work is browser review and iteration on premium variable-page chart ergonomics, then exports and subscriber dashboard/watchlist.
 
 ---
 
@@ -715,7 +715,15 @@ Stripe plans, webhook handling, webhook idempotency, plan-gated access checks, a
 
 **2.2 Premium variable pages**
 
-Subscribers see forecast charts, consensus as-of history, individual series, forecast dispersion, vintage history, ranked forecasters, and export options.
+Subscribers see a generous variable command view, not a teaser-heavy upsell surface. Basic subscribers get actuals, basic Farfield consensus, legally safe public-institution forecast series, and forecasts from forecasters/products they subscribe to. Do not show locked private-forecaster series or locked report cards inside the normal subscriber variable page. If coverage is missing, show a request-coverage action so Farfield can capture demand and inform forecasters.
+
+The first chart controls should stay simple:
+
+1. **Layer toggles:** basic consensus, public institutions, my forecasters.
+2. **Selector:** target period and as-of date. Add horizon, vintage/release, and latest-vs-first-release controls only after the first data shape is stable.
+3. **Access rule:** actuals are public; basic consensus is included for all subscribers; public institution forecasts are visible to subscribers where source policy allows; subscribed forecaster forecasts are visible only to users entitled to those products; other private/commercial forecaster values are not returned at all.
+
+Farfield weighted consensus is a later premium/institutional product, alongside advanced ranking depth, exports/API, team seats, and revision analytics. Do not make weighted consensus a noisy locked module in the basic subscriber chart.
 
 **2.3 Subscriber dashboard and watchlist**
 

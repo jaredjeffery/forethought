@@ -1,8 +1,8 @@
 // /variables/[slug] - public variable detail page with actuals and locked premium modules.
 
 import { db } from "@/lib/db";
-import { variables, forecasts, actuals } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { variables, forecasts, actuals, consensusForecasts, forecasters } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
@@ -10,8 +10,11 @@ import { ActualsBars } from "@/components/viz/ActualsBars";
 import { Sparkline } from "@/components/viz/Sparkline";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
+import { canAccessPremiumForecastData, getForecastDataAccess } from "@/lib/access/forecast-data";
+import { articles } from "@/lib/content";
+import { PremiumVariableChart } from "@/components/variables/PremiumVariableChart";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 const COUNTRY_LABELS: Record<string, string> = {
   WLD: "World",
@@ -60,6 +63,74 @@ async function getVariableData(slug: string) {
   };
 }
 
+function isoDate(value: Date | string | null) {
+  if (!value) return null;
+  return (value instanceof Date ? value : new Date(value)).toISOString().slice(0, 10);
+}
+
+async function getPremiumVariableData(variableId: string) {
+  const consensusRows = await db
+    .select({
+      targetPeriod: consensusForecasts.targetPeriod,
+      asOfDate: consensusForecasts.asOfDate,
+      simpleMean: consensusForecasts.simpleMean,
+      includedForecastCount: consensusForecasts.includedForecastCount,
+    })
+    .from(consensusForecasts)
+    .where(eq(consensusForecasts.variableId, variableId))
+    .orderBy(consensusForecasts.targetPeriod, consensusForecasts.asOfDate);
+
+  const institutionForecastRows = await db
+    .select({
+      targetPeriod: forecasts.targetPeriod,
+      value: forecasts.value,
+      forecastMadeAt: forecasts.forecastMadeAt,
+      submittedAt: forecasts.submittedAt,
+      forecasterSlug: forecasters.slug,
+      forecasterName: forecasters.name,
+    })
+    .from(forecasts)
+    .innerJoin(forecasters, eq(forecasters.id, forecasts.forecasterId))
+    .where(and(eq(forecasts.variableId, variableId), eq(forecasters.type, "INSTITUTION")))
+    .orderBy(forecasts.targetPeriod, forecasts.forecastMadeAt, forecasts.submittedAt);
+
+  return {
+    consensus: consensusRows.map((row) => ({
+      targetPeriod: row.targetPeriod,
+      asOfDate: String(row.asOfDate),
+      value: parseFloat(row.simpleMean),
+      includedForecastCount: row.includedForecastCount,
+    })),
+    publicInstitutionForecasts: institutionForecastRows
+      .map((row) => {
+        const asOfDate = isoDate(row.forecastMadeAt ?? row.submittedAt);
+        if (!asOfDate) return null;
+        return {
+          targetPeriod: row.targetPeriod,
+          asOfDate,
+          forecasterSlug: row.forecasterSlug,
+          forecasterName: row.forecasterName,
+          value: parseFloat(row.value),
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row)),
+    myForecasterForecasts: [],
+  };
+}
+
+function getVariableResearch(variableName: string) {
+  const lowerName = variableName.toLowerCase();
+  const matches = articles.filter((article) => {
+    const haystack = `${article.title} ${article.dek} ${article.tag}`.toLowerCase();
+    if (lowerName.includes("gdp")) return haystack.includes("gdp") || haystack.includes("growth");
+    if (lowerName.includes("inflation") || lowerName.includes("cpi")) return haystack.includes("inflation");
+    if (lowerName.includes("oil")) return haystack.includes("oil");
+    return haystack.includes(lowerName.split(" ")[0]);
+  });
+
+  return (matches.length > 0 ? matches : articles.slice(0, 3)).slice(0, 4);
+}
+
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
@@ -67,10 +138,12 @@ interface PageProps {
 export default async function VariableDetailPage({ params }: PageProps) {
   const { slug } = await params;
   const data = await getVariableData(slug);
+  const access = await getForecastDataAccess();
 
   if (!data) notFound();
 
   const { variable, actualRows, forecastCoverage } = data;
+  const canSeePremium = canAccessPremiumForecastData(access);
 
   // Dedup by target period (latest published wins).
   const actualByPeriod = new Map<string, typeof actualRows[number]>();
@@ -116,6 +189,13 @@ export default async function VariableDetailPage({ params }: PageProps) {
     .map((a) => ({ period: a.targetPeriod, value: parseFloat(a.value) }));
 
   const countryLabel = COUNTRY_LABELS[variable.countryCode] ?? variable.countryCode;
+  const premiumData = canSeePremium ? await getPremiumVariableData(variable.id) : null;
+  const researchItems = getVariableResearch(variable.name);
+  const premiumActuals = sortedActuals.map((a) => ({
+    targetPeriod: a.targetPeriod,
+    value: parseFloat(a.value),
+    source: a.source,
+  }));
 
   return (
     <div className="space-y-12">
@@ -320,7 +400,94 @@ export default async function VariableDetailPage({ params }: PageProps) {
         </section>
       )}
 
+      {premiumData && (
+        <>
+          <section>
+            <SectionLabel>Subscriber Forecast View</SectionLabel>
+            <Card padding="lg" raised>
+              <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_0.75fr] lg:items-end">
+                <div>
+                  <h2
+                    className="text-3xl leading-tight text-ink"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    Consensus, public institutions, and your forecasters in one view
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
+                    Basic consensus is included for subscribers. Public institution forecasts
+                    can be compared alongside actuals, while private forecaster series only
+                    appear when you subscribe to those forecasters.
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-bg-alt p-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-muted">
+                    Weighted consensus
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    Reserved for a later premium or institutional product, separate from the
+                    basic subscriber consensus shown here.
+                  </p>
+                </div>
+              </div>
+              <PremiumVariableChart
+                unit={variable.unit}
+                consensus={premiumData.consensus}
+                publicInstitutionForecasts={premiumData.publicInstitutionForecasts}
+                myForecasterForecasts={premiumData.myForecasterForecasts}
+                actuals={premiumActuals}
+              />
+            </Card>
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
+            <Card padding="lg">
+              <SectionLabel>Research on this variable</SectionLabel>
+              <div className="space-y-4">
+                {researchItems.map((article) => (
+                  <Link
+                    key={article.slug}
+                    href={`/articles/${article.slug}`}
+                    className="block border-b border-border pb-4 last:border-b-0 last:pb-0"
+                  >
+                    <p className="text-xs font-bold uppercase tracking-widest text-cobalt">
+                      {article.column ?? article.label}
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold leading-snug text-ink">
+                      {article.title}
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-muted">{article.dek}</p>
+                  </Link>
+                ))}
+              </div>
+            </Card>
+
+            <Card padding="lg" className="bg-bg-alt">
+              <SectionLabel>Coverage Requests</SectionLabel>
+              <h3
+                className="text-2xl leading-tight text-ink"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Want more forecaster coverage here?
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-muted">
+                Requesting coverage helps Farfield see where subscriber demand is
+                concentrated and gives forecasters a signal about what to publish next.
+              </p>
+              <Link
+                href={`mailto:coverage@farfield.ai?subject=Request coverage: ${encodeURIComponent(
+                  `${variable.name} ${countryLabel}`,
+                )}`}
+                className="btn-primary mt-5"
+              >
+                Request coverage
+              </Link>
+            </Card>
+          </section>
+        </>
+      )}
+
       {/* SUBSCRIBER PREVIEW */}
+      {!premiumData && (
       <section>
         <SectionLabel>Subscriber Preview</SectionLabel>
         <Card padding="lg" className="bg-bg-alt">
@@ -361,6 +528,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
           </div>
         </Card>
       </section>
+      )}
 
       {sortedActuals.length === 0 && (
         <p className="py-8 text-base text-muted">

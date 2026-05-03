@@ -10,7 +10,7 @@ Read this before continuing work:
 - Latest commit at handoff: see `git log -1` (Phase 1 design + content pass committed 2026-05-03)
 - Local dev URL: `http://127.0.0.1:3000`
 - Current phase: Phase 2 subscriber data product, billing/access foundation implemented
-- Current priority: Phase 2.2 premium variable pages (consensus as-of charts, vintage history, dispersion, exports)
+- Current priority: review and iterate the Phase 2.2 premium variable-page first draft, then add exports and dashboard/watchlist
 - Public surface now follows the Farfield Design System (Prism token layer): warm porcelain bg, cobalt primary, Instrument Serif display + DM Sans body + JetBrains Mono numerals, brand lockup in the top-right of the header, prismatic data viz across homepage, variable detail, and forecaster profile pages
 
 ### Current product surface
@@ -20,6 +20,7 @@ Public routes currently implemented:
 - `/` — editorial-first homepage with lead story, top stories, Leading Indicators, Forecaster Spotlight, Farfield Blog, public actuals chart, compact source/coverage record strip, and locked subscriber preview
 - `/articles` and `/articles/[slug]` — static Farfield editorial/mock article pages using `src/lib/content.ts` and `ArticleVisual`
 - `/variables` and `/variables/[slug]` — public actuals-only variable directory/detail pages using slugs, with forecast coverage counts and locked premium modules
+- `/variables/[slug]` — subscriber/admin branch now includes a first-draft premium forecast view with target/as-of selectors, basic consensus, public institution series, and request-coverage/research panels
 - `/forecasters` and `/forecasters/[slug]` — public non-leaky institution/forecaster directory and profiles with coverage/trust signals, not detailed score tables
 - `/methodology` — methodology overview
 - `/methodology/scoring` — scoring, horizon, vintage, and public-vs-subscriber score publication rules
@@ -71,6 +72,17 @@ Public routes currently implemented:
 - `/api/billing/portal` opens Stripe Billing Portal for users with a linked Stripe customer.
 - `/api/stripe/webhook` verifies Stripe signatures, ignores duplicate events, and syncs subscription state on checkout and customer subscription events.
 - Premium forecast/consensus access now requires an active or trialing subscription with a future current period, or `ADMIN`; `BUYER` role alone no longer unlocks premium data.
+
+### Premium variable-page state
+
+- `docs/BUILD_PLAN.md` Phase 2.2 now explicitly avoids teaser-heavy subscriber pages: no locked private-forecaster series and no locked report cards in the subscriber variable view.
+- Basic Farfield consensus is included for all subscribers; Farfield weighted consensus is reserved for a later premium/institutional product.
+- `/variables/[slug]` is now dynamic so subscriber/admin content is not served from public cache.
+- Subscriber/admin users see a first-draft `Subscriber Forecast View` on variable detail pages.
+- The chart has target-period and as-of-date selectors plus layer toggles for basic consensus, public institutions, and my forecasters.
+- Public institution series come from institutional forecaster rows for that variable. "My forecasters" is present as a disabled/empty layer until forecaster subscription/product entitlement tables exist.
+- The subscriber branch adds a "Research on this variable" panel using existing Farfield editorial and a "Request coverage" action.
+- Public users still see only the public subscriber preview; no premium forecast/consensus values are queried for public requests.
 
 ### Verification commands
 
@@ -124,21 +136,24 @@ Public pages may show:
 
 ### Next recommended steps
 
-1. Build Phase 2.2 premium variable pages:
-   - consensus as-of charts
-   - vintage history
-   - individual forecast series
-   - dispersion
-   - exports/downloads
+1. Browser-review and iterate the Phase 2.2 premium variable-page first draft:
+   - chart selector ergonomics
+   - target-period defaults
+   - how actuals should display on an expectation-over-time chart
+   - research panel relevance
+   - request-coverage wording/workflow
+2. Add the next premium variable modules:
+   - exports/downloads for accessible series
    - subscriber-only ranking/detail panels
-2. Final Phase 1 public-page polish pass:
+   - dispersion once the included forecast set is clear
+3. Final Phase 1 public-page polish pass:
    - Homepage: tune editorial spacing/order after browser review
    - Articles: decide whether mock content is enough for Phase 1 or should be pared down
    - Variables: make locked premium modules and pricing CTA feel consistent
    - Forecasters: review profiles for profile text, trust panels, and non-leaky coverage presentation
    - Methodology/pricing: quick copy polish and link audit
-3. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape.
-4. If World Bank GEP forecast ingestion remains active, add Phase 0.5 provenance/audit support to that forecast pipeline only; do not revive World Bank Indicators as a macro actuals fallback.
+4. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape.
+5. If World Bank GEP forecast ingestion remains active, add Phase 0.5 provenance/audit support to that forecast pipeline only; do not revive World Bank Indicators as a macro actuals fallback.
 
 ### Worktree warning
 
@@ -181,6 +196,14 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 - Updated premium forecast access so active/trialing subscription records unlock subscriber data; `ADMIN` remains an override; `BUYER` role alone no longer grants access
 - Added `scripts/qa-subscription-access.ts` to verify role-only users are blocked, active/trialing subscriptions pass, and cancelled/expired subscriptions fail
 - Added `STRIPE_SUBSCRIBER_PRICE_ID` to `.env.example` and `docs/BUILD_PLAN.md`
+
+**Phase 2.2 premium variable-page first draft**
+- Updated `docs/BUILD_PLAN.md` so subscriber variable pages include basic consensus, public institutions, and my forecasters without locked private forecast teasers
+- Added `src/components/variables/PremiumVariableChart.tsx` with target-period and as-of selectors plus layer toggles for basic consensus, public institutions, and my forecasters
+- Updated `/variables/[slug]` to render a subscriber/admin-only forecast view backed by consensus snapshots and institutional forecast rows
+- Kept public requests non-leaky by only fetching premium chart data after `canAccessPremiumForecastData(access)` passes
+- Added subscriber-side research and request-coverage panels; no locked report cards are shown in the subscriber branch
+- Forced `/variables/[slug]` dynamic to avoid auth-specific premium content being cached into public responses
 
 **World Bank actuals fallback retired**
 - Updated `src/lib/scoring/index.ts` so core macro scoring excludes World Bank actuals instead of using them as a fallback when WEO is missing
@@ -238,20 +261,24 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 - Article and methodology copy carries real economic substance and a point of view
 - All Phase 0.5 data integrity guarantees intact: leakage tests pass, no forecast values on public/free pages, no consensus values exposed except where actuals are public
 - Phase 2.1 subscription schema/routes/access policy are in place and verified locally
+- Phase 2.2 premium variable-page first draft is implemented behind subscriber/admin access
 
 ### Known issues
 
 - Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes `auth()` to log a `MissingSecret` warning at runtime in `next dev` mode. Public SSR pages still render; production build and leakage tests use an explicit env load and are unaffected. The user can fix this locally by setting a real AUTH_SECRET in `.env.local`.
 - Stripe checkout/portal require real `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_SUBSCRIBER_PRICE_ID` values before they can be tested end-to-end against Stripe.
+- "My forecasters" is an empty/disabled premium variable chart layer until forecaster subscription/product entitlement tables exist in Phase 3.
+- The research panel currently uses static Farfield editorial matching heuristics; report/product-backed research feeds need the content/marketplace schema later.
 - World Bank-coded score fallback is retired: strict actual-source QA now reports 0 `forecast_scores` rows using World Bank actuals.
 - World Bank GEP forecast ingestion still lacks Phase 0.5 provenance/audit treatment if it remains active, but World Bank Indicators are legacy/reference-only for core macro actuals.
 
 ### Next steps
 
-1. Build Phase 2.2 premium variable pages: consensus as-of, individual forecast series, vintage history, dispersion, ranking/detail panels, and exports
-2. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape
-3. Add Phase 0.5 provenance to World Bank GEP forecast ingestion only if that source remains active
-4. If a transparent-background SVG version of the brand lockup is needed for darker surfaces in future contexts, source one from the design system or commission an update; the current PNG is matched to the warm porcelain bg
+1. Browser-review and iterate the premium variable-page first draft, especially chart controls and the expectation-over-time chart shape
+2. Add export/download for accessible subscriber series
+3. Add subscriber-only ranking/detail panels and dispersion after the included-series model is stable
+4. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape
+5. Add Phase 0.5 provenance to World Bank GEP forecast ingestion only if that source remains active
 
 ## Session 2026-05-02
 
