@@ -36,6 +36,13 @@
       "when": 1777729148137,
       "tag": "0004_variable_slug_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777799269097,
+      "tag": "0005_phase_2_subscriptions",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,5 @@
 // Drizzle ORM schema for Farfield.
-// All tables needed for Phase 1 (Forecast Observatory).
-// Phase 2 tables (content, briefs, subscriptions) will be added later.
+// Covers the public observatory plus the Phase 2 subscriber access foundation.
 
 import {
   pgTable,
@@ -28,6 +27,17 @@ export const userRoleEnum = pgEnum("user_role", [
   "ANALYST",
   "BUYER",
   "ADMIN",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "INCOMPLETE",
+  "INCOMPLETE_EXPIRED",
+  "TRIALING",
+  "ACTIVE",
+  "PAST_DUE",
+  "CANCELED",
+  "UNPAID",
+  "PAUSED",
 ]);
 
 export const forecasterTypeEnum = pgEnum("forecaster_type", [
@@ -253,6 +263,38 @@ export const dataQualityFlags = pgTable("data_quality_flags", {
   index("data_quality_flags_status_idx").on(table.status),
   index("data_quality_flags_entity_idx").on(table.entityType, table.entityId),
 ]);
+
+// ---------------------------------------------------------------------------
+// Subscriptions and Stripe event audit
+// Subscriber access is derived from this table, not from the users.role shortcut.
+// ---------------------------------------------------------------------------
+
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id").notNull().unique(),
+  stripePriceId: text("stripe_price_id"),
+  planKey: text("plan_key").notNull().default("subscriber"),
+  status: subscriptionStatusEnum("status").notNull(),
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  trialEnd: timestamp("trial_end", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("subscriptions_user_status_idx").on(table.userId, table.status),
+  index("subscriptions_customer_idx").on(table.stripeCustomerId),
+]);
+
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  payload: jsonb("payload"),
+});
 
 // ---------------------------------------------------------------------------
 // Scoring methodologies

@@ -9,8 +9,8 @@ Read this before continuing work:
 - Current branch: `codex/phase-0-5-data-integrity`
 - Latest commit at handoff: see `git log -1` (Phase 1 design + content pass committed 2026-05-03)
 - Local dev URL: `http://127.0.0.1:3000`
-- Current phase: Phase 1 public showcase MVP, design + content pass complete
-- Current priority: Phase 2 planning (Stripe billing, premium variable pages, dashboards). The World Bank actuals fallback question is settled.
+- Current phase: Phase 2 subscriber data product, billing/access foundation implemented
+- Current priority: Phase 2.2 premium variable pages (consensus as-of charts, vintage history, dispersion, exports)
 - Public surface now follows the Farfield Design System (Prism token layer): warm porcelain bg, cobalt primary, Instrument Serif display + DM Sans body + JetBrains Mono numerals, brand lockup in the top-right of the header, prismatic data viz across homepage, variable detail, and forecaster profile pages
 
 ### Current product surface
@@ -62,6 +62,16 @@ Public routes currently implemented:
 - OECD and ECB ingestion now records provenance metadata.
 - World Bank GEP forecast ingestion may still be used as a forecast source, but World Bank Indicators are legacy/reference-only for core macro actuals.
 
+### Billing/subscriber state
+
+- Migration `0005_phase_2_subscriptions` has been generated and applied to the configured database.
+- `subscriptions` records Stripe customer/subscription IDs, plan key, status, current period, cancellation, and trial timestamps.
+- `stripe_webhook_events` records processed Stripe event IDs and payloads for webhook idempotency.
+- `/api/billing/checkout` creates a Stripe subscription Checkout session for signed-in users.
+- `/api/billing/portal` opens Stripe Billing Portal for users with a linked Stripe customer.
+- `/api/stripe/webhook` verifies Stripe signatures, ignores duplicate events, and syncs subscription state on checkout and customer subscription events.
+- Premium forecast/consensus access now requires an active or trialing subscription with a future current period, or `ADMIN`; `BUYER` role alone no longer unlocks premium data.
+
 ### Verification commands
 
 Run these before handing work back:
@@ -83,6 +93,7 @@ Recent verification status:
 
 - `npx tsc --noEmit` passes
 - `npm run build` passes
+- `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-subscription-access.ts` passes
 - `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-actuals-sources.ts` passes with 0 World Bank-backed score rows
 - strict data QA passes with 0 attention runs, 0 running imports, 0 open quality flags, 0 score reference issues, 0 latest source docs missing hashes, and 0 latest source docs without linked rows
 - leakage tests pass against the built app and current database
@@ -113,21 +124,21 @@ Public pages may show:
 
 ### Next recommended steps
 
-1. Prepare Phase 2 planning:
-   - Stripe subscription billing
-   - subscriber access checks
-   - premium variable pages
+1. Build Phase 2.2 premium variable pages:
    - consensus as-of charts
    - vintage history
+   - individual forecast series
+   - dispersion
    - exports/downloads
-   - dashboard/watchlist
+   - subscriber-only ranking/detail panels
 2. Final Phase 1 public-page polish pass:
    - Homepage: tune editorial spacing/order after browser review
    - Articles: decide whether mock content is enough for Phase 1 or should be pared down
    - Variables: make locked premium modules and pricing CTA feel consistent
    - Forecasters: review profiles for profile text, trust panels, and non-leaky coverage presentation
    - Methodology/pricing: quick copy polish and link audit
-3. If World Bank GEP forecast ingestion remains active, add Phase 0.5 provenance/audit support to that forecast pipeline only; do not revive World Bank Indicators as a macro actuals fallback.
+3. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape.
+4. If World Bank GEP forecast ingestion remains active, add Phase 0.5 provenance/audit support to that forecast pipeline only; do not revive World Bank Indicators as a macro actuals fallback.
 
 ### Worktree warning
 
@@ -159,6 +170,17 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 ## Session 2026-05-03
 
 ### Completed
+
+**Phase 2.1 subscriber billing/access foundation**
+- Added `subscriptions` and `stripe_webhook_events` schema plus migration `0005_phase_2_subscriptions`
+- Applied the migration to the configured database with `npm run db:migrate`
+- Added Stripe helpers in `src/lib/payments/stripe.ts` for client configuration, price ID lookup, app URL handling, and subscription upserts
+- Added `/api/billing/checkout` to create Stripe subscription Checkout sessions for signed-in users
+- Added `/api/billing/portal` to create Stripe Billing Portal sessions for users with a linked customer
+- Added `/api/stripe/webhook` with signature verification, processed-event idempotency, and subscription sync for checkout/subscription events
+- Updated premium forecast access so active/trialing subscription records unlock subscriber data; `ADMIN` remains an override; `BUYER` role alone no longer grants access
+- Added `scripts/qa-subscription-access.ts` to verify role-only users are blocked, active/trialing subscriptions pass, and cancelled/expired subscriptions fail
+- Added `STRIPE_SUBSCRIBER_PRICE_ID` to `.env.example` and `docs/BUILD_PLAN.md`
 
 **World Bank actuals fallback retired**
 - Updated `src/lib/scoring/index.ts` so core macro scoring excludes World Bank actuals instead of using them as a fallback when WEO is missing
@@ -215,18 +237,21 @@ Key recent commits on `codex/phase-0-5-data-integrity`:
 - Homepage, variable detail, and forecaster profile pages all carry first-class data visualisations built from server-rendered SVG primitives
 - Article and methodology copy carries real economic substance and a point of view
 - All Phase 0.5 data integrity guarantees intact: leakage tests pass, no forecast values on public/free pages, no consensus values exposed except where actuals are public
+- Phase 2.1 subscription schema/routes/access policy are in place and verified locally
 
 ### Known issues
 
 - Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes `auth()` to log a `MissingSecret` warning at runtime in `next dev` mode. Public SSR pages still render; production build and leakage tests use an explicit env load and are unaffected. The user can fix this locally by setting a real AUTH_SECRET in `.env.local`.
+- Stripe checkout/portal require real `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_SUBSCRIBER_PRICE_ID` values before they can be tested end-to-end against Stripe.
 - World Bank-coded score fallback is retired: strict actual-source QA now reports 0 `forecast_scores` rows using World Bank actuals.
 - World Bank GEP forecast ingestion still lacks Phase 0.5 provenance/audit treatment if it remains active, but World Bank Indicators are legacy/reference-only for core macro actuals.
 
 ### Next steps
 
-1. Begin Phase 2 planning: Stripe subscription billing, premium variable pages (consensus as-of, vintage history, dispersion, exports), subscriber dashboard, watchlist
-2. Add Phase 0.5 provenance to World Bank GEP forecast ingestion only if that source remains active
-3. If a transparent-background SVG version of the brand lockup is needed for darker surfaces in future contexts, source one from the design system or commission an update; the current PNG is matched to the warm porcelain bg
+1. Build Phase 2.2 premium variable pages: consensus as-of, individual forecast series, vintage history, dispersion, ranking/detail panels, and exports
+2. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape
+3. Add Phase 0.5 provenance to World Bank GEP forecast ingestion only if that source remains active
+4. If a transparent-background SVG version of the brand lockup is needed for darker surfaces in future contexts, source one from the design system or commission an update; the current PNG is matched to the warm porcelain bg
 
 ## Session 2026-05-02
 

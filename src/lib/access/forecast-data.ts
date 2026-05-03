@@ -3,13 +3,29 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { subscriptions, users } from "@/lib/db/schema";
+import { and, eq, gt, inArray } from "drizzle-orm";
 
 export type ForecastDataAccess = "public" | "free" | "subscriber" | "admin";
 
 export function canAccessPremiumForecastData(access: ForecastDataAccess) {
   return access === "subscriber" || access === "admin";
+}
+
+export async function hasActiveSubscription(userId: string) {
+  const [activeSubscription] = await db
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.userId, userId),
+        inArray(subscriptions.status, ["ACTIVE", "TRIALING"]),
+        gt(subscriptions.currentPeriodEnd, new Date()),
+      )
+    )
+    .limit(1);
+
+  return Boolean(activeSubscription);
 }
 
 export async function getForecastDataAccess(): Promise<ForecastDataAccess> {
@@ -26,7 +42,7 @@ export async function getForecastDataAccess(): Promise<ForecastDataAccess> {
 
   if (!user) return "public";
   if (user.role === "ADMIN") return "admin";
-  if (user.role === "BUYER") return "subscriber";
+  if (await hasActiveSubscription(userId)) return "subscriber";
 
   return "free";
 }
