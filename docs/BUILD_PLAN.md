@@ -720,14 +720,18 @@ Subscribers see a generous variable command view, not a teaser-heavy upsell surf
 The first chart controls should stay simple:
 
 1. **Layer toggles:** basic consensus, public institutions, my forecasters.
-2. **Selector:** target period and as-of date. Add horizon, vintage/release, and latest-vs-first-release controls only after the first data shape is stable.
+2. **Date controls:** start period and end period for the time-series view. Do not make users inspect one target period at a time on the primary variable page.
 3. **Access rule:** actuals are public; basic consensus is included for all subscribers; public institution forecasts are visible to subscribers where source policy allows; subscribed forecaster forecasts are visible only to users entitled to those products; other private/commercial forecaster values are not returned at all.
+
+Variable pages should have one main chart workbench rather than repeated actuals charts. Public/free users get the full actuals time series with hover values and no forecast-layer controls. Subscribers get the same chart with plan-aware layer toggles and CSV export once exports are implemented. Near the top of every variable page, show a public top-forecasters panel with aggregate MAE/sample-size signals for that variable; require a minimum sample threshold before ranking a forecaster so one-off scores do not top the page. Detailed horizon slices, vintage slices, and forecaster-by-forecaster comparison tables remain subscriber/premium modules.
+
+Some economic concepts will need grouped variable families: for example, United States GDP growth can have annual, quarterly, and eventually monthly/nowcast child series. The variable landing page should eventually group those related series with separate chart tabs or sections only when they are genuinely different frequencies or source definitions. Avoid rendering repeated charts for the same data.
 
 Farfield weighted consensus is a later premium/institutional product, alongside advanced ranking depth, exports/API, team seats, and revision analytics. Do not make weighted consensus a noisy locked module in the basic subscriber chart.
 
 **2.3 Subscriber dashboard and watchlist**
 
-Dashboard answers "what changed since I last visited?" Watchlist shows consensus updates, forecast changes, new actuals, and alert settings for followed variables.
+Dashboard answers "what changed since I last visited?" Watchlist shows consensus updates, forecast changes, new actuals, and alert settings for followed variables. The dashboard should reuse the variable-page chart/data components, but let subscribers build a personal feed by variables, periods, forecasters, institutions, and reports they follow.
 
 **2.4 Data section (`/data`)**
 

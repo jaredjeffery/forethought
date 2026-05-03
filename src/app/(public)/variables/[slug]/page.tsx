@@ -1,18 +1,23 @@
 // /variables/[slug] - public variable detail page with actuals and locked premium modules.
 
 import { db } from "@/lib/db";
-import { variables, forecasts, actuals, consensusForecasts, forecasters } from "@/lib/db/schema";
+import {
+  variables,
+  forecasts,
+  actuals,
+  consensusForecasts,
+  forecasters,
+  forecastScores,
+} from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
-import { ActualsBars } from "@/components/viz/ActualsBars";
 import { Sparkline } from "@/components/viz/Sparkline";
 import { Card } from "@/components/ui/Card";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { canAccessPremiumForecastData, getForecastDataAccess } from "@/lib/access/forecast-data";
 import { articles } from "@/lib/content";
-import { PremiumVariableChart } from "@/components/variables/PremiumVariableChart";
+import { VariableChartWorkbench } from "@/components/variables/PremiumVariableChart";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +58,67 @@ async function getVariableData(slug: string) {
     .where(eq(actuals.variableId, variable.id))
     .orderBy(actuals.targetPeriod);
 
+  const scoreRows = await db
+    .select({
+      forecasterId: forecasters.id,
+      forecasterSlug: forecasters.slug,
+      forecasterName: forecasters.name,
+      absoluteError: forecastScores.absoluteError,
+      horizonMonths: forecastScores.horizonMonths,
+    })
+    .from(forecastScores)
+    .innerJoin(forecasts, eq(forecasts.id, forecastScores.forecastId))
+    .innerJoin(forecasters, eq(forecasters.id, forecasts.forecasterId))
+    .where(eq(forecasts.variableId, variable.id));
+
+  const performanceByForecaster = new Map<
+    string,
+    {
+      slug: string;
+      name: string;
+      absoluteErrorSum: number;
+      sampleSize: number;
+      horizons: Set<number>;
+    }
+  >();
+
+  for (const row of scoreRows) {
+    if (row.absoluteError === null) continue;
+    const absoluteError = parseFloat(row.absoluteError);
+    if (!Number.isFinite(absoluteError)) continue;
+    const current =
+      performanceByForecaster.get(row.forecasterId) ??
+      {
+        slug: row.forecasterSlug,
+        name: row.forecasterName,
+        absoluteErrorSum: 0,
+        sampleSize: 0,
+        horizons: new Set<number>(),
+      };
+    current.absoluteErrorSum += absoluteError;
+    current.sampleSize += 1;
+    if (row.horizonMonths !== null) {
+      current.horizons.add(row.horizonMonths);
+    }
+    performanceByForecaster.set(row.forecasterId, current);
+  }
+
+  const topForecasters = Array.from(performanceByForecaster.values())
+    .filter((row) => row.sampleSize >= 3)
+    .map((row) => ({
+      slug: row.slug,
+      name: row.name,
+      mae: row.absoluteErrorSum / row.sampleSize,
+      sampleSize: row.sampleSize,
+      horizonCount: row.horizons.size,
+    }))
+    .sort((a, b) => a.mae - b.mae)
+    .slice(0, 5);
+
   return {
     variable,
     actualRows,
+    topForecasters,
     forecastCoverage: {
       forecasterCount: new Set(coverageRows.map((row) => row.forecasterId)).size,
       targetPeriodCount: new Set(coverageRows.map((row) => row.targetPeriod)).size,
@@ -66,6 +129,16 @@ async function getVariableData(slug: string) {
 function isoDate(value: Date | string | null) {
   if (!value) return null;
   return (value instanceof Date ? value : new Date(value)).toISOString().slice(0, 10);
+}
+
+function shouldUseActualCandidate(
+  current: { source: string } | undefined,
+  candidate: { source: string },
+) {
+  if (!current) return true;
+  const currentIsWeo = current.source.startsWith("IMF-WEO");
+  const candidateIsWeo = candidate.source.startsWith("IMF-WEO");
+  return candidateIsWeo && !currentIsWeo;
 }
 
 async function getPremiumVariableData(variableId: string) {
@@ -142,33 +215,18 @@ export default async function VariableDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { variable, actualRows, forecastCoverage } = data;
+  const { variable, actualRows, forecastCoverage, topForecasters } = data;
   const canSeePremium = canAccessPremiumForecastData(access);
 
-  // Dedup by target period (latest published wins).
+  // Dedup by target period. Prefer WEO-carried actuals when multiple sources exist.
   const actualByPeriod = new Map<string, typeof actualRows[number]>();
   for (const a of actualRows) {
-    actualByPeriod.set(a.targetPeriod, a);
+    if (shouldUseActualCandidate(actualByPeriod.get(a.targetPeriod), a)) {
+      actualByPeriod.set(a.targetPeriod, a);
+    }
   }
   const sortedActuals = Array.from(actualByPeriod.values()).sort((a, b) =>
     a.targetPeriod.localeCompare(b.targetPeriod),
-  );
-
-  const allPeriods = sortedActuals.map((a) => a.targetPeriod);
-  const chartData: DataPoint[] = allPeriods.map((period) => ({
-    period,
-    actual: actualByPeriod.get(period)
-      ? parseFloat(actualByPeriod.get(period)!.value)
-      : null,
-  }));
-
-  // Source breakdown
-  const sourceCounts = new Map<string, number>();
-  for (const a of actualRows) {
-    sourceCounts.set(a.source, (sourceCounts.get(a.source) ?? 0) + 1);
-  }
-  const sourcesByCount = Array.from(sourceCounts.entries()).sort(
-    (a, b) => b[1] - a[1],
   );
 
   const latestActual = sortedActuals.at(-1);
@@ -184,10 +242,6 @@ export default async function VariableDetailPage({ params }: PageProps) {
       : null;
 
   const sparkValues = sortedActuals.slice(-18).map((a) => parseFloat(a.value));
-  const barData = sortedActuals
-    .slice(-16)
-    .map((a) => ({ period: a.targetPeriod, value: parseFloat(a.value) }));
-
   const countryLabel = COUNTRY_LABELS[variable.countryCode] ?? variable.countryCode;
   const premiumData = canSeePremium ? await getPremiumVariableData(variable.id) : null;
   const researchItems = getVariableResearch(variable.name);
@@ -281,37 +335,53 @@ export default async function VariableDetailPage({ params }: PageProps) {
         )}
       </section>
 
-      {/* ACTUALS BARS — punchy at-a-glance trend */}
-      {barData.length > 0 && (
-        <section>
-          <SectionLabel>At a Glance</SectionLabel>
-          <Card padding="lg">
-            <ActualsBars data={barData} unit={variable.unit} height={160} />
-          </Card>
-        </section>
-      )}
-
-      {/* FULL HISTORY CHART */}
-      {chartData.length > 0 && (
-        <section>
-          <SectionLabel>Actuals History</SectionLabel>
-          <Card padding="none" raised>
-            <div className="px-4 pt-6 pb-4">
-              <ForecastChart
-                data={chartData}
-                series={[]}
-                unit={variable.unit}
-                height={420}
-              />
+      {/* FORECASTER PERFORMANCE + COVERAGE */}
+      <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
+        <Card padding="lg" raised>
+          <SectionLabel>Top Forecasters</SectionLabel>
+          {topForecasters.length > 0 ? (
+            <div className="space-y-3">
+              {topForecasters.map((forecaster, index) => (
+                <Link
+                  key={forecaster.slug}
+                  href={`/forecasters/${forecaster.slug}`}
+                  className="grid gap-3 border-b border-border pb-3 last:border-b-0 last:pb-0 sm:grid-cols-[3rem_1fr_auto] sm:items-center"
+                >
+                  <span className="font-mono text-2xl font-bold tabular-nums text-cobalt">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span>
+                    <span className="block font-semibold text-ink">{forecaster.name}</span>
+                    <span className="mt-1 block text-xs text-muted">
+                      {forecaster.sampleSize} scored forecasts
+                      {forecaster.horizonCount > 0
+                        ? ` across ${forecaster.horizonCount} horizon${
+                            forecaster.horizonCount === 1 ? "" : "s"
+                          }`
+                        : ""}
+                    </span>
+                  </span>
+                  <span className="text-left sm:text-right">
+                    <span className="block text-[10px] font-bold uppercase tracking-widest text-muted">
+                      MAE
+                    </span>
+                    <span className="font-mono text-lg font-bold tabular-nums text-ink">
+                      {forecaster.mae.toFixed(2)}
+                      {unitSuffix}
+                    </span>
+                  </span>
+                </Link>
+              ))}
             </div>
-          </Card>
-        </section>
-      )}
+          ) : (
+            <p className="text-sm leading-6 text-muted">
+              No scored forecaster record is available for this variable yet.
+            </p>
+          )}
+        </Card>
 
-      {/* COVERAGE + SOURCES */}
-      <section className="grid gap-4 lg:grid-cols-[0.6fr_1.4fr]">
         <Card padding="lg" className="border-l-4 border-l-cobalt">
-          <SectionLabel>Forecast Coverage</SectionLabel>
+          <SectionLabel>Coverage</SectionLabel>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
@@ -323,17 +393,13 @@ export default async function VariableDetailPage({ params }: PageProps) {
             </div>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
-                Target periods
+                Periods
               </p>
               <p className="mt-1 font-mono text-3xl font-bold tabular-nums text-ink">
                 {forecastCoverage.targetPeriodCount}
               </p>
             </div>
           </div>
-          <p className="mt-5 text-sm leading-6 text-muted">
-            Forecast values, consensus history, dispersion, and exports require a subscriber
-            account.
-          </p>
           <Link
             href="/pricing"
             className="mt-4 inline-flex text-sm font-semibold text-cobalt hover:text-cobalt-dark"
@@ -342,76 +408,45 @@ export default async function VariableDetailPage({ params }: PageProps) {
           </Link>
         </Card>
 
-        <Card padding="lg">
-          <SectionLabel>Sources Behind the Actuals</SectionLabel>
-          {sourcesByCount.length > 0 ? (
-            <div className="space-y-3">
-              {sourcesByCount.map(([source, count]) => {
-                const max = sourcesByCount[0][1];
-                const ratio = (count / max) * 100;
-                return (
-                  <div key={source}>
-                    <div className="mb-1 flex items-center justify-between text-sm">
-                      <span className="font-semibold text-ink">{source}</span>
-                      <span className="font-mono text-xs tabular-nums text-muted">
-                        {count} releases
-                      </span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-bg-alt">
-                      <div
-                        className="h-full rounded-full bg-cobalt"
-                        style={{ width: `${ratio}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-muted">No actual sources recorded yet.</p>
-          )}
-        </Card>
       </section>
+
+      {premiumActuals.length > 0 && (
+        <section>
+          <SectionLabel>Variable Chart</SectionLabel>
+          <Card padding="lg" raised>
+            <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+              <div>
+                <h2
+                  className="text-3xl leading-tight text-ink"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Actuals and accessible forecast layers
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
+                  Hover over the chart to inspect values. Subscribers can add basic
+                  consensus, public institutions, and subscribed forecaster series.
+                </p>
+              </div>
+              {!premiumData && (
+                <Link href="/pricing" className="btn-primary">
+                  Request access
+                </Link>
+              )}
+            </div>
+            <VariableChartWorkbench
+              unit={variable.unit}
+              access={premiumData ? "subscriber" : "public"}
+              consensus={premiumData?.consensus}
+              publicInstitutionForecasts={premiumData?.publicInstitutionForecasts}
+              myForecasterForecasts={premiumData?.myForecasterForecasts}
+              actuals={premiumActuals}
+            />
+          </Card>
+        </section>
+      )}
 
       {premiumData && (
         <>
-          <section>
-            <SectionLabel>Subscriber Forecast View</SectionLabel>
-            <Card padding="lg" raised>
-              <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_0.75fr] lg:items-end">
-                <div>
-                  <h2
-                    className="text-3xl leading-tight text-ink"
-                    style={{ fontFamily: "var(--font-display)" }}
-                  >
-                    Consensus, public institutions, and your forecasters in one view
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
-                    Basic consensus is included for subscribers. Public institution forecasts
-                    can be compared alongside actuals, while private forecaster series only
-                    appear when you subscribe to those forecasters.
-                  </p>
-                </div>
-                <div className="rounded-md border border-border bg-bg-alt p-4">
-                  <p className="text-xs font-bold uppercase tracking-widest text-muted">
-                    Weighted consensus
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-muted">
-                    Reserved for a later premium or institutional product, separate from the
-                    basic subscriber consensus shown here.
-                  </p>
-                </div>
-              </div>
-              <PremiumVariableChart
-                unit={variable.unit}
-                consensus={premiumData.consensus}
-                publicInstitutionForecasts={premiumData.publicInstitutionForecasts}
-                myForecasterForecasts={premiumData.myForecasterForecasts}
-                actuals={premiumActuals}
-              />
-            </Card>
-          </section>
-
           <section className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
             <Card padding="lg">
               <SectionLabel>Research on this variable</SectionLabel>

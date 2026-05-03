@@ -4,7 +4,7 @@
 // Colors come from the Prism design tokens via CSS variables.
 
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine, Area, ComposedChart,
 } from "recharts";
 
@@ -189,6 +189,7 @@ export function ForecastChart({
           strokeWidth={3}
           dot={{ r: 4, fill: INK, strokeWidth: 0 }}
           activeDot={{ r: 5 }}
+          isAnimationActive={false}
           connectNulls={false}
         />
 
@@ -204,6 +205,7 @@ export function ForecastChart({
             strokeDasharray={s.slug !== "consensus" ? "5 3" : undefined}
             dot={false}
             activeDot={{ r: 4 }}
+            isAnimationActive={false}
             connectNulls={false}
           />
         ))}

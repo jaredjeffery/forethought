@@ -1,5 +1,5 @@
 "use client";
-// Subscriber-only variable chart controls for consensus and accessible forecast layers.
+// Main variable chart workbench for public actuals and subscriber-only forecast layers.
 
 import { useMemo, useState } from "react";
 import { ForecastChart, type DataPoint } from "@/components/ForecastChart";
@@ -25,11 +25,12 @@ export interface PremiumActualPoint {
   source: string;
 }
 
-interface PremiumVariableChartProps {
+interface VariableChartWorkbenchProps {
   unit: string;
-  consensus: PremiumConsensusPoint[];
-  publicInstitutionForecasts: PremiumInstitutionPoint[];
-  myForecasterForecasts: PremiumInstitutionPoint[];
+  access: "public" | "subscriber";
+  consensus?: PremiumConsensusPoint[];
+  publicInstitutionForecasts?: PremiumInstitutionPoint[];
+  myForecasterForecasts?: PremiumInstitutionPoint[];
   actuals: PremiumActualPoint[];
 }
 
@@ -43,79 +44,107 @@ function uniqueSorted(values: string[]) {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 }
 
+function first<T>(values: T[]) {
+  return values.length > 0 ? values[0] : undefined;
+}
+
 function last<T>(values: T[]) {
   return values.length > 0 ? values[values.length - 1] : undefined;
 }
 
-export function PremiumVariableChart({
+function seriesKey(prefix: string, slug: string) {
+  return `${prefix}_${slug.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+}
+
+function latestByTarget(points: PremiumConsensusPoint[]) {
+  const rows = new Map<string, PremiumConsensusPoint>();
+  for (const point of points) {
+    const current = rows.get(point.targetPeriod);
+    if (!current || point.asOfDate > current.asOfDate) {
+      rows.set(point.targetPeriod, point);
+    }
+  }
+  return rows;
+}
+
+function latestInstitutionByTarget(points: PremiumInstitutionPoint[]) {
+  const rows = new Map<string, PremiumInstitutionPoint>();
+  for (const point of points) {
+    const key = `${point.forecasterSlug}:${point.targetPeriod}`;
+    const current = rows.get(key);
+    if (!current || point.asOfDate > current.asOfDate) {
+      rows.set(key, point);
+    }
+  }
+  return rows;
+}
+
+export function VariableChartWorkbench({
   unit,
-  consensus,
-  publicInstitutionForecasts,
-  myForecasterForecasts,
+  access,
+  consensus = [],
+  publicInstitutionForecasts = [],
+  myForecasterForecasts = [],
   actuals,
-}: PremiumVariableChartProps) {
-  const targetPeriods = uniqueSorted([
+}: VariableChartWorkbenchProps) {
+  const allPeriods = uniqueSorted([
+    ...actuals.map((point) => point.targetPeriod),
     ...consensus.map((point) => point.targetPeriod),
     ...publicInstitutionForecasts.map((point) => point.targetPeriod),
     ...myForecasterForecasts.map((point) => point.targetPeriod),
   ]);
 
-  const [targetPeriod, setTargetPeriod] = useState(last(targetPeriods) ?? "");
+  const [startPeriod, setStartPeriod] = useState(first(allPeriods) ?? "");
+  const [endPeriod, setEndPeriod] = useState(last(allPeriods) ?? "");
   const [layers, setLayers] = useState(layerDefaults);
 
-  const asOfDatesForTarget = uniqueSorted([
-    ...consensus
-      .filter((point) => point.targetPeriod === targetPeriod)
-      .map((point) => point.asOfDate),
-    ...publicInstitutionForecasts
-      .filter((point) => point.targetPeriod === targetPeriod)
-      .map((point) => point.asOfDate),
-    ...myForecasterForecasts
-      .filter((point) => point.targetPeriod === targetPeriod)
-      .map((point) => point.asOfDate),
-  ]);
-
-  const [selectedAsOfDate, setSelectedAsOfDate] = useState(last(asOfDatesForTarget) ?? "");
-  const effectiveAsOfDate = asOfDatesForTarget.includes(selectedAsOfDate)
-    ? selectedAsOfDate
-    : last(asOfDatesForTarget) ?? "";
-
   const visibleData = useMemo(() => {
-    const actual = actuals.find((point) => point.targetPeriod === targetPeriod);
+    const lower = startPeriod && endPeriod && startPeriod > endPeriod ? endPeriod : startPeriod;
+    const upper = startPeriod && endPeriod && startPeriod > endPeriod ? startPeriod : endPeriod;
+    const periods = allPeriods.filter((period) => {
+      if (lower && period < lower) return false;
+      if (upper && period > upper) return false;
+      return true;
+    });
+
+    const actualByTarget = new Map(actuals.map((point) => [point.targetPeriod, point]));
     const rows = new Map<string, DataPoint>();
+    for (const period of periods) {
+      rows.set(period, {
+        period,
+        actual: actualByTarget.get(period)?.value ?? null,
+      });
+    }
+
     const seriesMap = new Map<string, { slug: string; name: string }>();
 
-    function rowFor(asOfDate: string) {
-      const row = rows.get(asOfDate) ?? {
-        period: asOfDate,
-        actual: actual?.value ?? null,
-      };
-      rows.set(asOfDate, row);
-      return row;
-    }
-
-    if (layers.consensus) {
-      for (const point of consensus) {
-        if (point.targetPeriod !== targetPeriod || point.asOfDate > effectiveAsOfDate) continue;
-        rowFor(point.asOfDate).consensus = point.value;
+    if (access === "subscriber" && layers.consensus) {
+      const latestConsensus = latestByTarget(consensus);
+      for (const [period, point] of latestConsensus) {
+        if (!rows.has(period)) continue;
+        rows.get(period)!.consensus = point.value;
       }
-      seriesMap.set("consensus", { slug: "consensus", name: "Basic consensus" });
+      if (latestConsensus.size > 0) {
+        seriesMap.set("consensus", { slug: "consensus", name: "Basic consensus" });
+      }
     }
 
-    if (layers.publicInstitutions) {
-      for (const point of publicInstitutionForecasts) {
-        if (point.targetPeriod !== targetPeriod || point.asOfDate > effectiveAsOfDate) continue;
-        const slug = `institution_${point.forecasterSlug.replace(/[^a-zA-Z0-9_]/g, "_")}`;
-        rowFor(point.asOfDate)[slug] = point.value;
+    if (access === "subscriber" && layers.publicInstitutions) {
+      const latestInstitutionForecasts = latestInstitutionByTarget(publicInstitutionForecasts);
+      for (const point of latestInstitutionForecasts.values()) {
+        if (!rows.has(point.targetPeriod)) continue;
+        const slug = seriesKey("institution", point.forecasterSlug);
+        rows.get(point.targetPeriod)![slug] = point.value;
         seriesMap.set(slug, { slug, name: point.forecasterName });
       }
     }
 
-    if (layers.myForecasters) {
-      for (const point of myForecasterForecasts) {
-        if (point.targetPeriod !== targetPeriod || point.asOfDate > effectiveAsOfDate) continue;
-        const slug = `my_${point.forecasterSlug.replace(/[^a-zA-Z0-9_]/g, "_")}`;
-        rowFor(point.asOfDate)[slug] = point.value;
+    if (access === "subscriber" && layers.myForecasters) {
+      const latestMyForecasts = latestInstitutionByTarget(myForecasterForecasts);
+      for (const point of latestMyForecasts.values()) {
+        if (!rows.has(point.targetPeriod)) continue;
+        const slug = seriesKey("my", point.forecasterSlug);
+        rows.get(point.targetPeriod)![slug] = point.value;
         seriesMap.set(slug, { slug, name: point.forecasterName });
       }
     }
@@ -123,130 +152,134 @@ export function PremiumVariableChart({
     return {
       chartData: Array.from(rows.values()).sort((a, b) => a.period.localeCompare(b.period)),
       series: Array.from(seriesMap.values()),
-      actual,
+      rangeLabel: lower && upper ? `${lower} to ${upper}` : "full history",
     };
   }, [
+    access,
     actuals,
+    allPeriods,
     consensus,
-    effectiveAsOfDate,
+    endPeriod,
     layers.consensus,
     layers.myForecasters,
     layers.publicInstitutions,
     myForecasterForecasts,
     publicInstitutionForecasts,
-    targetPeriod,
+    startPeriod,
   ]);
 
-  if (targetPeriods.length === 0) {
+  if (allPeriods.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border p-8 text-sm leading-6 text-muted">
-        No subscriber forecast series are available for this variable yet.
+        No chart data available yet for this variable.
       </div>
     );
   }
 
+  const canShowControls = access === "subscriber";
+
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 border-b border-border pb-5 lg:grid-cols-[0.8fr_0.8fr_1.4fr]">
-        <label className="text-xs font-bold uppercase tracking-widest text-muted">
-          Target period
-          <select
-            value={targetPeriod}
-            onChange={(event) => {
-              setTargetPeriod(event.target.value);
-              setSelectedAsOfDate("");
-            }}
-            className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-ink"
-          >
-            {targetPeriods.map((period) => (
-              <option key={period} value={period}>
-                {period}
-              </option>
-            ))}
-          </select>
-        </label>
+      {canShowControls ? (
+        <div className="grid gap-4 border-b border-border pb-5 lg:grid-cols-[0.7fr_0.7fr_1.6fr]">
+          <label className="text-xs font-bold uppercase tracking-widest text-muted">
+            Start
+            <select
+              value={startPeriod}
+              onChange={(event) => setStartPeriod(event.target.value)}
+              className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-ink"
+            >
+              {allPeriods.map((period) => (
+                <option key={period} value={period}>
+                  {period}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="text-xs font-bold uppercase tracking-widest text-muted">
-          As of
-          <select
-            value={effectiveAsOfDate}
-            onChange={(event) => setSelectedAsOfDate(event.target.value)}
-            className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-ink"
-          >
-            {asOfDatesForTarget.map((date) => (
-              <option key={date} value={date}>
-                {date}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="text-xs font-bold uppercase tracking-widest text-muted">
+            End
+            <select
+              value={endPeriod}
+              onChange={(event) => setEndPeriod(event.target.value)}
+              className="mt-2 w-full rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold normal-case tracking-normal text-ink"
+            >
+              {allPeriods.map((period) => (
+                <option key={period} value={period}>
+                  {period}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-muted">Chart layers</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {[
-              ["consensus", "Basic consensus"],
-              ["publicInstitutions", "Public institutions"],
-              ["myForecasters", "My forecasters"],
-            ].map(([key, label]) => {
-              const typedKey = key as keyof typeof layers;
-              const disabled = typedKey === "myForecasters" && myForecasterForecasts.length === 0;
-              return (
-                <label
-                  key={key}
-                  className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold ${
-                    disabled
-                      ? "border-border bg-bg-alt text-muted"
-                      : "border-border bg-white text-ink"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={layers[typedKey] && !disabled}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      setLayers((current) => ({
-                        ...current,
-                        [typedKey]: event.target.checked,
-                      }))
-                    }
-                  />
-                  {label}
-                </label>
-              );
-            })}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted">Chart layers</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {[
+                { key: "consensus", label: "Basic consensus", disabled: consensus.length === 0 },
+                {
+                  key: "publicInstitutions",
+                  label: "Public institutions",
+                  disabled: publicInstitutionForecasts.length === 0,
+                },
+                {
+                  key: "myForecasters",
+                  label: "My forecasters",
+                  disabled: myForecasterForecasts.length === 0,
+                },
+              ].map(({ key, label, disabled }) => {
+                const typedKey = key as keyof typeof layers;
+                const isDisabled = disabled;
+                return (
+                  <label
+                    key={key}
+                    className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold ${
+                      isDisabled
+                        ? "border-border bg-bg-alt text-muted"
+                        : "border-border bg-white text-ink"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={layers[typedKey] && !isDisabled}
+                      disabled={isDisabled}
+                      onChange={(event) =>
+                        setLayers((current) => ({
+                          ...current,
+                          [typedKey]: event.target.checked,
+                        }))
+                      }
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="border-b border-border pb-4 text-sm leading-6 text-muted">
+          Public view: actual outcomes only. Subscribers can add consensus, public institutions,
+          subscribed forecasters, and exports.
+        </div>
+      )}
 
       <ForecastChart
         data={visibleData.chartData}
         series={visibleData.series}
         unit={unit}
-        height={460}
+        height={480}
       />
 
-      <div className="grid gap-3 text-sm text-muted md:grid-cols-3">
-        <div className="rounded-md border border-border bg-bg-alt p-4">
-          <p className="font-semibold text-ink">Included for subscribers</p>
-          <p className="mt-1 leading-6">
-            Basic consensus and public institution series are shown when available.
-          </p>
-        </div>
-        <div className="rounded-md border border-border bg-bg-alt p-4">
-          <p className="font-semibold text-ink">My forecasters</p>
-          <p className="mt-1 leading-6">
-            Personal forecaster subscriptions will appear here once forecaster products are live.
-          </p>
-        </div>
-        <div className="rounded-md border border-border bg-bg-alt p-4">
-          <p className="font-semibold text-ink">Actual outcome</p>
-          <p className="mt-1 leading-6">
-            {visibleData.actual
-              ? `${targetPeriod}: ${visibleData.actual.value.toFixed(2)} ${unit} from ${visibleData.actual.source}`
-              : "No actual has been recorded for this target period yet."}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-xs text-muted">
+        <span>
+          Showing <span className="font-semibold text-ink">{visibleData.rangeLabel}</span>.
+        </span>
+        {canShowControls ? (
+          <span>CSV export is the next subscriber action to wire into this chart.</span>
+        ) : (
+          <span>Forecast and consensus values are not returned for public requests.</span>
+        )}
       </div>
     </div>
   );
