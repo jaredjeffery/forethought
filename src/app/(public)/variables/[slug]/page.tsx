@@ -35,6 +35,159 @@ const COUNTRY_LABELS: Record<string, string> = {
   BRA: "Brazil",
 };
 
+function getVariablePlanningModules(variableName: string, countryLabel: string) {
+  const lowerName = variableName.toLowerCase();
+  const isGdp = lowerName.includes("gdp");
+  const isInflation = lowerName.includes("inflation") || lowerName.includes("cpi");
+  const isUnemployment = lowerName.includes("unemployment");
+
+  if (isGdp) {
+    return {
+      otherFrequencies: [
+        {
+          label: "Quarterly GDP growth",
+          detail: "Separate chart and score table once quarterly actuals and forecasts are ingested.",
+          status: "Planned",
+        },
+        {
+          label: "Monthly activity proxies",
+          detail: "Industrial production, retail sales, payrolls, and PMI signals for early read-through.",
+          status: "Signal set",
+        },
+      ],
+      releaseCalendar: {
+        title: "Quarterly national accounts",
+        expected: "Source calendar pending",
+        source: countryLabel === "United States" ? "BEA" : "National authority",
+        targetPeriod: "Next quarterly release",
+        note: "Farfield will show source links, publication status, and whether earlier periods may be revised.",
+      },
+      relatedVariables: [
+        "CPI inflation",
+        "Unemployment rate",
+        "Government balance",
+        "Current account balance",
+      ],
+      leadingSignals: [
+        "PMI",
+        "Industrial production",
+        "Retail sales",
+        "Payroll growth",
+        "Consumer confidence",
+      ],
+    };
+  }
+
+  if (isInflation) {
+    return {
+      otherFrequencies: [
+        {
+          label: "Monthly CPI inflation",
+          detail: "Monthly release view with seasonally adjusted and year-on-year series.",
+          status: "Planned",
+        },
+        {
+          label: "Core inflation",
+          detail: "Separate series for excluding volatile food and energy components where available.",
+          status: "Signal set",
+        },
+      ],
+      releaseCalendar: {
+        title: "Consumer price release",
+        expected: "Source calendar pending",
+        source: "National statistics office",
+        targetPeriod: "Next monthly release",
+        note: "Farfield will show release time, target month, source links, and revision policy.",
+      },
+      relatedVariables: [
+        "Policy rate",
+        "Wage growth",
+        "Oil price",
+        "Exchange rate",
+      ],
+      leadingSignals: [
+        "Fuel prices",
+        "Food prices",
+        "Import prices",
+        "Rent measures",
+        "Inflation expectations",
+      ],
+    };
+  }
+
+  if (isUnemployment) {
+    return {
+      otherFrequencies: [
+        {
+          label: "Monthly labour market release",
+          detail: "Monthly series where official labour-force data supports it.",
+          status: "Planned",
+        },
+        {
+          label: "Employment growth",
+          detail: "Payroll or employment-level series for labour-market turning points.",
+          status: "Signal set",
+        },
+      ],
+      releaseCalendar: {
+        title: "Labour market release",
+        expected: "Source calendar pending",
+        source: "National statistics office",
+        targetPeriod: "Next labour-market period",
+        note: "Farfield will show survey period, publication date, source links, and revision risk.",
+      },
+      relatedVariables: [
+        "GDP growth",
+        "CPI inflation",
+        "Wage growth",
+        "Consumer confidence",
+      ],
+      leadingSignals: [
+        "Jobless claims",
+        "Vacancy rate",
+        "Payroll growth",
+        "PMI employment",
+        "Household survey detail",
+      ],
+    };
+  }
+
+  return {
+    otherFrequencies: [
+      {
+        label: "Higher-frequency series",
+        detail: "Quarterly or monthly pages will appear when source coverage supports them.",
+        status: "Planned",
+      },
+      {
+        label: "Comparable concepts",
+        detail: "Related definitions and source variants will be grouped under this variable family.",
+        status: "Signal set",
+      },
+    ],
+    releaseCalendar: {
+      title: "Official release",
+      expected: "Source calendar pending",
+      source: "Primary source",
+      targetPeriod: "Next release period",
+      note: "Farfield will show release date, source links, status, and revision risk.",
+    },
+    relatedVariables: [
+      "GDP growth",
+      "CPI inflation",
+      "Unemployment rate",
+      "Current account balance",
+    ],
+    leadingSignals: [
+      "Survey indicators",
+      "Market prices",
+      "Policy announcements",
+      "High-frequency activity data",
+      "Source revisions",
+    ],
+  };
+}
+
 async function getVariableData(slug: string) {
   const [variable] = await db
     .select()
@@ -243,6 +396,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
 
   const sparkValues = sortedActuals.slice(-18).map((a) => parseFloat(a.value));
   const countryLabel = COUNTRY_LABELS[variable.countryCode] ?? variable.countryCode;
+  const planningModules = getVariablePlanningModules(variable.name, countryLabel);
   const premiumData = canSeePremium ? await getPremiumVariableData(variable.id) : null;
   const researchItems = getVariableResearch(variable.name);
   const premiumActuals = sortedActuals.map((a) => ({
@@ -444,6 +598,116 @@ export default async function VariableDetailPage({ params }: PageProps) {
           </Card>
         </section>
       )}
+
+      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <Card padding="lg">
+          <SectionLabel>Other Periods</SectionLabel>
+          <div className="space-y-4">
+            {planningModules.otherFrequencies.map((item) => (
+              <div
+                key={item.label}
+                className="border-b border-border pb-4 last:border-b-0 last:pb-0"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="font-semibold text-ink">{item.label}</h3>
+                  <span className="badge badge-neutral">{item.status}</span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-muted">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+          <Link
+            href={`mailto:coverage@farfield.ai?subject=Request period coverage: ${encodeURIComponent(
+              `${variable.name} ${countryLabel}`,
+            )}`}
+            className="mt-5 inline-flex text-sm font-semibold text-cobalt hover:text-cobalt-dark"
+          >
+            Request period coverage
+          </Link>
+        </Card>
+
+        <Card padding="lg" className="border-l-4 border-l-emerald">
+          <SectionLabel>Next Official Release</SectionLabel>
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
+            <div>
+              <h3
+                className="text-2xl leading-tight text-ink"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                {planningModules.releaseCalendar.title}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                {planningModules.releaseCalendar.note}
+              </p>
+            </div>
+            <span className="badge badge-neutral">Calendar planned</span>
+          </div>
+          <div className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                Expected
+              </p>
+              <p className="mt-1 font-semibold text-ink">
+                {planningModules.releaseCalendar.expected}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                Period
+              </p>
+              <p className="mt-1 font-semibold text-ink">
+                {planningModules.releaseCalendar.targetPeriod}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
+                Source
+              </p>
+              <p className="mt-1 font-semibold text-ink">
+                {planningModules.releaseCalendar.source}
+              </p>
+            </div>
+          </div>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-2">
+        <Card padding="lg">
+          <SectionLabel>Related Variables</SectionLabel>
+          <div className="flex flex-wrap gap-2">
+            {planningModules.relatedVariables.map((item) => (
+              <span
+                key={item}
+                className="rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+          <p className="mt-5 text-sm leading-6 text-muted">
+            These become linked variable-family cards once the related series are ingested and
+            scored.
+          </p>
+        </Card>
+
+        <Card padding="lg">
+          <SectionLabel>Leading Signals</SectionLabel>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {planningModules.leadingSignals.map((item) => (
+              <div
+                key={item}
+                className="rounded-md border border-border bg-bg-alt px-3 py-2 text-sm font-semibold text-ink"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+          <p className="mt-5 text-sm leading-6 text-muted">
+            Farfield can later test which signals tend to move before this variable and show
+            that evidence beside the chart.
+          </p>
+        </Card>
+      </section>
 
       {premiumData && (
         <>

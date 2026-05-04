@@ -727,6 +727,15 @@ Variable pages should have one main chart workbench rather than repeated actuals
 
 Some economic concepts will need grouped variable families: for example, United States GDP growth can have annual, quarterly, and eventually monthly/nowcast child series. The variable landing page should eventually group those related series with separate chart tabs or sections only when they are genuinely different frequencies or source definitions. Avoid rendering repeated charts for the same data.
 
+Variable pages should also preview the wider forecasting workflow:
+
+- **Other periods/frequencies:** links or request-coverage actions for quarterly, monthly, and higher-frequency versions of the same concept.
+- **Official release calendar:** next expected official data release, expected target period, source, status, release URL, and revision-risk note. Start admin-maintained for priority variables; automate from source calendars later.
+- **Related variables:** same-family or economically linked variables that users may want beside the current chart.
+- **Leading signals:** hand-curated at first, then evidence-backed once Farfield can test which series tend to move before the target variable.
+
+Future schema should include `variable_families`, `variable_relationships`, `leading_indicator_links`, and `data_release_calendar` rather than hard-coding these page modules. Release calendar rows should track `variable_id`, `source_name`, `release_date`, `release_time`, `target_period`, `release_type`, `status`, `confidence`, `source_url`, `notes`, and `updated_at`.
+
 Farfield weighted consensus is a later premium/institutional product, alongside advanced ranking depth, exports/API, team seats, and revision analytics. Do not make weighted consensus a noisy locked module in the basic subscriber chart.
 
 **2.3 Subscriber dashboard and watchlist**

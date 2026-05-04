@@ -19,6 +19,7 @@ Latest update:
 - `getForecastDataAccess()` now fails closed to public access in local development if Auth.js cannot initialize because `AUTH_SECRET` is missing, so public variable pages do not 500 during local preview.
 - Started the variable-page refactor: `/variables/[slug]` now has a public top-forecasters panel based on aggregate MAE/sample size, one main chart workbench, and subscriber-only controls for start/end period plus basic consensus, public institutions, and my forecasters.
 - Variable-page actual selection now prefers WEO-carried actuals when multiple actual sources exist for the same period, so legacy World Bank reference rows do not appear in the rendered GDP page or chart payload when WEO exists.
+- Added first-draft variable-page scaffolding for other periods/frequencies, next official release, related variables, and leading signals. These are visible planning modules until backing tables and source-calendar ingestion exist.
 
 ### Current product surface
 
@@ -94,6 +95,7 @@ Public routes currently implemented:
 - The previous `Recent Actuals` card grid has been removed to keep the variable page chart-led rather than duplicating values in a space-heavy table-like layout.
 - The old repeated `At a Glance` and `Actuals History` chart sections have been replaced by the single workbench. Public/free users get actuals-only; subscribers get plan-aware forecast layers.
 - Public top-forecaster ranking currently requires at least three scored forecasts for that variable to avoid ranking one-off samples as leaders.
+- Variable pages now show planned modules for other period types, release calendar, related variables, and leading signals; future schema should replace the temporary page-level helper with `variable_families`, `variable_relationships`, `leading_indicator_links`, and `data_release_calendar`.
 
 ### Verification commands
 
