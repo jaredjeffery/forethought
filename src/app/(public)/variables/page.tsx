@@ -1,4 +1,4 @@
-// /variables — browseable list of all tracked economic variables.
+// /variables — browseable list of all tracked Farfield indicators.
 
 import { db } from "@/lib/db";
 import { variables, actuals } from "@/lib/db/schema";
@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 export const revalidate = 3600;
 
 const CATEGORIES = ["MACRO", "COMMODITY", "FINANCIAL", "POLITICAL"] as const;
+const FREQUENCIES = ["ANNUAL", "QUARTERLY", "MONTHLY"] as const;
 
 const COUNTRY_OPTIONS = [
   { code: "WLD", label: "World" },
@@ -33,10 +34,15 @@ const COUNTRY_OPTIONS = [
   { code: "SAU", label: "Saudi Arabia" },
 ];
 
-async function getVariables(country?: string, category?: string) {
+function titleCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+async function getVariables(country?: string, category?: string, frequency?: string) {
   const conditions = [];
   if (country) conditions.push(eq(variables.countryCode, country));
   if (category) conditions.push(eq(variables.category, category as typeof CATEGORIES[number]));
+  if (frequency) conditions.push(eq(variables.frequency, frequency as typeof FREQUENCIES[number]));
 
   const rows = await db
     .select()
@@ -64,12 +70,12 @@ const inputClass =
   "text-sm border border-border-strong rounded-[10px] px-3.5 py-2 bg-surface text-ink focus:border-cobalt focus:outline-none focus:ring-2 focus:ring-cobalt/20 transition-colors";
 
 interface PageProps {
-  searchParams: Promise<{ country?: string; category?: string }>;
+  searchParams: Promise<{ country?: string; category?: string; frequency?: string }>;
 }
 
 export default async function VariablesPage({ searchParams }: PageProps) {
-  const { country, category } = await searchParams;
-  const { rows, latestActualsMap } = await getVariables(country, category);
+  const { country, category, frequency } = await searchParams;
+  const { rows, latestActualsMap } = await getVariables(country, category, frequency);
 
   return (
     <div className="space-y-10">
@@ -79,49 +85,66 @@ export default async function VariablesPage({ searchParams }: PageProps) {
           className="mt-3 text-5xl tracking-tight text-ink"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          Variables
+          Indicators
         </h1>
         <span className="accent-rule" />
         <p className="mt-4 max-w-2xl text-base leading-7 text-muted">
-          Every tracked variable, with the latest actual reading and a click-through to the
-          full record. Filter by country or category.
+          Every tracked economic indicator, with the latest official reading and a
+          click-through to the full record. Filter by country, category, or frequency.
         </p>
       </div>
 
-      <form className="flex flex-wrap items-center gap-3">
-        <select name="country" defaultValue={country ?? ""} className={inputClass}>
-          <option value="">All countries</option>
-          {COUNTRY_OPTIONS.map((c) => (
-            <option key={c.code} value={c.code}>{c.label}</option>
-          ))}
-        </select>
-        <select name="category" defaultValue={category ?? ""} className={inputClass}>
-          <option value="">All categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        <button type="submit" className="btn-primary">
+      <form className="flex flex-wrap items-end gap-3">
+        <label className="grid gap-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+          Country
+          <select name="country" defaultValue={country ?? ""} className={inputClass}>
+            <option value="">All countries</option>
+            {COUNTRY_OPTIONS.map((c) => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+          Category
+          <select name="category" defaultValue={category ?? ""} className={inputClass}>
+            <option value="">All categories</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>{titleCase(c)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+          Frequency
+          <select name="frequency" defaultValue={frequency ?? ""} className={inputClass}>
+            <option value="">All frequencies</option>
+            {FREQUENCIES.map((f) => (
+              <option key={f} value={f}>{titleCase(f)}</option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className="btn-primary mb-0.5">
           Filter
         </button>
-        {(country || category) && (
-          <Link href="/variables" className="btn-secondary">
+        {(country || category || frequency) && (
+          <Link href="/variables" className="btn-secondary mb-0.5">
             Clear
           </Link>
         )}
-        <span className="ml-auto text-sm text-muted">{rows.length} variables</span>
+        <span className="ml-auto pb-3 text-sm text-muted">{rows.length} indicators</span>
       </form>
 
       {rows.length === 0 ? (
-        <p className="text-base text-muted py-8">No variables match the selected filters.</p>
+        <p className="text-base text-muted py-8">No indicators match the selected filters.</p>
       ) : (
         <Card padding="none">
           <div className="overflow-hidden">
             <table className="min-w-full">
               <thead className="border-b border-border bg-bg">
                 <tr className="text-xs font-bold tracking-wider text-muted uppercase">
-                  <th className="text-left px-6 py-3">Variable</th>
+                  <th className="text-left px-6 py-3">Indicator</th>
                   <th className="text-left px-6 py-3">Country</th>
+                  <th className="text-left px-6 py-3">Category</th>
+                  <th className="text-left px-6 py-3">Frequency</th>
                   <th className="text-left px-6 py-3">Unit</th>
                   <th className="text-right px-6 py-3">Latest actual</th>
                 </tr>
@@ -143,6 +166,8 @@ export default async function VariablesPage({ searchParams }: PageProps) {
                       <td className="px-6 py-4">
                         <span className="font-mono text-sm font-semibold tracking-wide text-muted">{v.countryCode}</span>
                       </td>
+                      <td className="px-6 py-4 text-sm text-muted">{titleCase(v.category)}</td>
+                      <td className="px-6 py-4 text-sm text-muted">{titleCase(v.frequency)}</td>
                       <td className="px-6 py-4 text-sm text-muted">{v.unit}</td>
                       <td
                         className="px-6 py-4 text-right tabular-nums"

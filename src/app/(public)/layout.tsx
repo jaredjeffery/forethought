@@ -15,7 +15,7 @@ export default async function PublicLayout({ children }: { children: React.React
         <div className="mx-auto flex h-full max-w-[var(--page-max)] items-center justify-between px-[var(--page-px)]">
           <nav className="hidden items-center gap-7 text-[14px] font-medium text-muted md:flex">
             <Link href="/variables" className="transition-colors hover:text-ink">
-              Variables
+              Indicators
             </Link>
             <Link href="/forecasters" className="transition-colors hover:text-ink">
               Forecasters

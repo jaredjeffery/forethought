@@ -118,7 +118,7 @@ export default async function ForecasterProfilePage({ params }: PageProps) {
           {[
             ["Forecasts tracked", forecastCount, "across vintages"],
             ["Scored sample", scoredCount, "rows with matched actuals"],
-            ["Variables covered", variableCount, "distinct indicators"],
+            ["Indicators covered", variableCount, "distinct indicators"],
             ["Geographies", countryCount, "countries / aggregates"],
           ].map(([label, value, sub]) => (
             <Card padding="md" key={String(label)}>

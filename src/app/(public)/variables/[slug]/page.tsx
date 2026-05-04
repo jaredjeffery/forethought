@@ -410,7 +410,7 @@ export default async function VariableDetailPage({ params }: PageProps) {
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-muted">
         <Link href="/variables" className="transition-colors hover:text-ink">
-          Variables
+          Indicators
         </Link>
         <span>›</span>
         <span className="text-ink">

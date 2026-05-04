@@ -300,7 +300,7 @@ export default async function LandingPage() {
                 Read analysis
               </Link>
               <Link href="/variables" className="btn-secondary">
-                Browse variables
+                Browse indicators
               </Link>
               <Link href="/forecasters" className="btn-secondary">
                 See forecasters

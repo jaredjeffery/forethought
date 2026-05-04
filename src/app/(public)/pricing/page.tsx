@@ -16,7 +16,7 @@ const planCards = [
     featured: false,
     items: [
       "Farfield editorial and Leading Indicators",
-      "Actuals-only variable pages",
+      "Actuals-only indicator pages",
       "Institution and forecaster profiles",
       "Methodology and source notes",
       "Locked previews of premium modules",
@@ -90,7 +90,7 @@ export default function PricingPage() {
               Request access
             </Link>
             <Link href="/variables" className="btn-secondary">
-              Browse variables
+              Browse indicators
             </Link>
           </div>
         </div>
