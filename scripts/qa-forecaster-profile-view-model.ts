@@ -2,7 +2,7 @@
 
 import { getForecasterPublicProfileViewModel } from "../src/lib/forecaster-queries";
 
-function assert(condition: boolean, message: string) {
+function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
