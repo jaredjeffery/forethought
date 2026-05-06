@@ -5,6 +5,11 @@
 import { db } from "./db";
 import { forecasters, forecasts, variables, forecastScores } from "./db/schema";
 import { eq, avg, count, countDistinct, sql, and, isNotNull, desc } from "drizzle-orm";
+import {
+  buildDefaultForecasterProfile,
+  type ForecasterKind,
+  type ForecasterProfileSummary,
+} from "./forecaster-profile";
 
 export async function getForecasterBySlug(slug: string) {
   const [forecaster] = await db
@@ -76,6 +81,35 @@ export async function getForecasterPublicProfileData(forecasterId: string) {
     coverageByIndicator,
     coverageByCountry,
     vintages: vintages.filter((row) => row.vintage != null),
+  };
+}
+
+export async function getForecasterPublicProfileViewModel(slug: string) {
+  const forecaster = await getForecasterBySlug(slug);
+  if (!forecaster) return null;
+
+  const publicProfile = await getForecasterPublicProfileData(forecaster.id);
+  const summary = publicProfile.summary;
+
+  const safeSummary: ForecasterProfileSummary = {
+    id: forecaster.id,
+    slug: forecaster.slug,
+    name: forecaster.name,
+    type: forecaster.type as ForecasterKind,
+    forecastCount: Number(summary.forecastCount),
+    scoredCount: Number(summary.scoredCount),
+    variableCount: Number(summary.variableCount),
+    countryCount: Number(summary.countryCount),
+    latestVintage: summary.latestVintage,
+  };
+
+  return {
+    forecaster,
+    profile: buildDefaultForecasterProfile(safeSummary),
+    summary: safeSummary,
+    coverageByIndicator: publicProfile.coverageByIndicator,
+    coverageByCountry: publicProfile.coverageByCountry,
+    vintages: publicProfile.vintages,
   };
 }
 
