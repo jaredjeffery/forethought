@@ -9,12 +9,13 @@
 - Settled on a fixed Farfield trust spine: compact side score rail, flexible middle widgets, and a fixed bottom recommendations section.
 - Decided customer proof should be text-only verified recommendations, not star ratings or numeric customer scores.
 - Wrote `docs/superpowers/specs/2026-05-06-forecaster-profile-redesign.md` for review.
+- Wrote `docs/superpowers/plans/2026-05-06-forecaster-profile-redesign.md` after spec approval.
 - Added `.superpowers/` to `.gitignore` so local brainstorming mockups do not enter source control.
 
 ### Current state
 
 - No app code has been changed for this redesign yet.
-- The profile redesign is documented as a draft spec awaiting review.
+- The profile redesign spec is approved and an implementation plan is ready.
 - Existing public profile implementation remains unchanged and non-leaky.
 
 ### Known issues
@@ -25,9 +26,9 @@
 
 ### Next steps
 
-1. Review and approve or edit the new profile redesign spec.
-2. After approval, write an implementation plan.
-3. Implement the redesigned public profile in small, testable increments.
+1. Choose execution mode for the implementation plan.
+2. Implement the redesigned public profile in small, testable increments.
+3. Review real seeded institution profiles in-browser after the first implementation pass.
 
 ## Claude handoff snapshot — 2026-05-03
 
