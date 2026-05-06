@@ -1,36 +1,140 @@
 @import "tailwindcss";
 
+/* Farfield Design System — Prism token layer.
+   Class names from the older "premium" pass are kept (text-accent, bg-bg,
+   signal-green/red/orange, border-dark) and remapped to the new tokens, so
+   every existing page picks up the new look without rewrites. */
+
 :root {
-  /* Base surfaces */
-  --bg:          #F7F8FA;
-  --surface:     #FFFFFF;
+  /* ── Surfaces (warm, porcelain) ── */
+  --bg:           #F7F6F2;
+  --bg-alt:       #F0EFE9;
+  --surface:      #FFFFFF;
+  --surface-tint: #FAFAF8;
 
-  /* Text */
-  --ink:         #111827;
-  --muted:       #6B7280;
+  /* ── Text ── */
+  --ink:    #18181B;
+  --ink-2:  #3F3F46;
+  --muted:  #71717A;
+  --subtle: #A1A1AA;
 
-  /* Borders */
-  --border:      #E5E7EB;
-  --border-dark: #D1D5DB;
+  /* ── Borders ── */
+  --border:        #E4E4E7;
+  --border-soft:   #F0F0EE;
+  --border-strong: #D4D4D8;
 
-  /* Brand accent */
-  --accent:      #1D4ED8;
-  --accent-dark: #1E3A8A;
-  --accent-light: #EFF6FF;
+  /* ── Cobalt (primary) ── */
+  --cobalt:       #2952CC;
+  --cobalt-dark:  #1E3A9E;
+  --cobalt-light: #EEF2FF;
+  --cobalt-mid:   #6B8FE8;
 
-  /* Semantic */
-  --green:       #059669;
-  --red:         #DC2626;
-  --orange:      #EA580C;
+  /* ── Cyan / Violet / Amber / Coral / Teal / Marigold / Vermilion ── */
+  --cyan:          #0891B2;
+  --cyan-light:    #ECFEFF;
+  --cyan-mid:      #67E8F9;
 
-  /* Shadows */
-  --shadow-card:  0 2px 8px rgba(15, 23, 42, 0.05);
-  --shadow-raised: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --violet:        #7C3AED;
+  --violet-light:  #F5F3FF;
+  --violet-mid:    #C4B5FD;
 
-  /* Radius */
-  --radius-sm:   8px;
-  --radius-md:   12px;
-  --radius-lg:   14px;
+  --coral:         #E8442A;
+  --coral-light:   #FFF1EE;
+  --coral-mid:     #FCA5A5;
+
+  --amber:         #D97706;
+  --amber-light:   #FFFBEB;
+  --amber-mid:     #FCD34D;
+
+  --teal:          #0D9488;
+  --teal-light:    #F0FDFA;
+  --teal-mid:      #5EEAD4;
+
+  --marigold:       #CA8A04;
+  --marigold-light: #FEFCE8;
+
+  --vermilion:       #DC4343;
+  --vermilion-light: #FEF2F2;
+
+  /* ── Chart series (prismatic rotation) ── */
+  --chart-actual:    #18181B;
+  --chart-consensus: #2952CC;
+  --chart-s1:        #E8442A;  /* coral */
+  --chart-s2:        #7C3AED;  /* violet */
+  --chart-s3:        #0891B2;  /* cyan */
+  --chart-s4:        #D97706;  /* amber */
+  --chart-s5:        #0D9488;  /* teal */
+  --chart-s6:        #BE185D;  /* rose */
+  --chart-s7:        #CA8A04;  /* marigold */
+  --chart-s8:        #4338CA;  /* indigo */
+
+  /* ── Prism light-leak overlays (very faint background washes) ── */
+  --prism-cobalt: rgba(41, 82, 204, 0.06);
+  --prism-violet: rgba(124, 58, 237, 0.05);
+  --prism-cyan:   rgba(8, 145, 178, 0.06);
+  --prism-amber:  rgba(217, 119, 6, 0.07);
+  --prism-coral:  rgba(232, 68, 42, 0.05);
+
+  /* ── Legacy aliases (preserve old Tailwind class names) ── */
+  --accent:       var(--cobalt);
+  --accent-dark:  var(--cobalt-dark);
+  --accent-light: var(--cobalt-light);
+  --border-dark:  var(--border-strong);
+  --green:        var(--teal);
+  --red:          var(--coral);
+  --orange:       var(--amber);
+
+  /* ── Spacing ── */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
+  --space-4: 16px;  --space-5: 20px;  --space-6: 24px;
+  --space-8: 32px;  --space-10: 40px; --space-12: 48px;
+  --space-16: 64px; --space-20: 80px; --space-24: 96px;
+  --page-max: 1200px;
+  --page-px:  44px;
+  --header-h: 68px;
+
+  /* ── Radius ── */
+  --r-xs:   4px;
+  --radius-sm:  8px;   --r-sm: 8px;
+  --radius-md:  12px;  --r-md: 12px;
+  --radius-lg:  16px;  --r-lg: 16px;
+  --r-xl:   20px;
+  --r-btn:  10px;
+  --r-pill: 999px;
+
+  /* ── Shadows ── */
+  --shadow-xs:   0 1px 2px rgba(24,24,27,0.05);
+  --shadow-sm:   0 1px 3px rgba(24,24,27,0.06), 0 1px 2px rgba(24,24,27,0.04);
+  --shadow-md:   0 4px 12px rgba(24,24,27,0.07), 0 1px 3px rgba(24,24,27,0.04);
+  --shadow-lg:   0 8px 28px rgba(24,24,27,0.08), 0 2px 8px rgba(24,24,27,0.04);
+  --shadow-btn:  0 1px 2px rgba(41,82,204,0.18), 0 3px 10px rgba(41,82,204,0.16);
+  --shadow-focus: 0 0 0 3px rgba(41,82,204,0.18);
+  /* Legacy names */
+  --shadow-card:   var(--shadow-sm);
+  --shadow-raised: var(--shadow-lg);
+
+  /* ── Type scale ── */
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-md:   16px;
+  --text-lg:   18px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  30px;
+  --text-4xl:  36px;
+  --text-5xl:  48px;
+  --text-hero: 60px;
+
+  --leading-tight:   1.15;
+  --leading-snug:    1.3;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight:   -0.025em;
+  --tracking-normal:  0;
+  --tracking-wide:    0.04em;
+  --tracking-widest:  0.09em;
 }
 
 @theme inline {
@@ -38,39 +142,234 @@
   --font-sans:    var(--font-sans);
   --font-mono:    var(--font-mono);
 
+  /* Surfaces */
   --color-bg:           var(--bg);
+  --color-bg-alt:       var(--bg-alt);
   --color-surface:      var(--surface);
-  --color-ink:          var(--ink);
-  --color-muted:        var(--muted);
-  --color-border:       var(--border);
-  --color-border-dark:  var(--border-dark);
-  --color-accent:       var(--accent);
-  --color-accent-dark:  var(--accent-dark);
-  --color-accent-light: var(--accent-light);
-  --color-signal-green: var(--green);
-  --color-signal-red:   var(--red);
-  --color-signal-orange: var(--orange);
+  --color-surface-tint: var(--surface-tint);
+
+  /* Text */
+  --color-ink:    var(--ink);
+  --color-ink-2:  var(--ink-2);
+  --color-muted:  var(--muted);
+  --color-subtle: var(--subtle);
+
+  /* Borders */
+  --color-border:        var(--border);
+  --color-border-soft:   var(--border-soft);
+  --color-border-strong: var(--border-strong);
+  --color-border-dark:   var(--border-strong); /* legacy alias */
+
+  /* Cobalt — surfaced under both 'cobalt' and 'accent' for legacy code */
+  --color-cobalt:       var(--cobalt);
+  --color-cobalt-dark:  var(--cobalt-dark);
+  --color-cobalt-light: var(--cobalt-light);
+  --color-cobalt-mid:   var(--cobalt-mid);
+  --color-accent:       var(--cobalt);
+  --color-accent-dark:  var(--cobalt-dark);
+  --color-accent-light: var(--cobalt-light);
+
+  /* Prism palette */
+  --color-cyan:        var(--cyan);
+  --color-cyan-light:  var(--cyan-light);
+  --color-cyan-mid:    var(--cyan-mid);
+  --color-violet:      var(--violet);
+  --color-violet-light: var(--violet-light);
+  --color-violet-mid:  var(--violet-mid);
+  --color-coral:       var(--coral);
+  --color-coral-light: var(--coral-light);
+  --color-coral-mid:   var(--coral-mid);
+  --color-amber:       var(--amber);
+  --color-amber-light: var(--amber-light);
+  --color-amber-mid:   var(--amber-mid);
+  --color-teal:        var(--teal);
+  --color-teal-light:  var(--teal-light);
+  --color-teal-mid:    var(--teal-mid);
+  --color-marigold:    var(--marigold);
+  --color-vermilion:   var(--vermilion);
+
+  /* Legacy semantic names mapped onto Prism */
+  --color-signal-green:  var(--teal);
+  --color-signal-red:    var(--coral);
+  --color-signal-orange: var(--amber);
 }
 
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 16px;
-  line-height: 1.6;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Reusable shadow and radius utilities — referenced by component classes */
+/* ── Reusable component classes ──────────────────────────────── */
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .card-raised {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-raised);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.section-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--cobalt);
+}
+
+.accent-rule {
+  display: block;
+  height: 3px;
+  width: 40px;
+  background: var(--cobalt);
+  border-radius: 2px;
+  margin-top: 10px;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 22px;
+  background: var(--cobalt);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-btn);
+  transition: background 160ms, transform 160ms;
+  text-decoration: none;
+}
+.btn-primary:hover {
+  background: var(--cobalt-dark);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--border-strong);
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: border-color 160ms, color 160ms;
+  text-decoration: none;
+}
+.btn-secondary:hover {
+  border-color: var(--cobalt);
+  color: var(--cobalt);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.badge-cobalt  { background: var(--cobalt-light);  color: var(--cobalt);  border: 1.5px solid #C7D7F8; }
+.badge-teal    { background: var(--teal-light);    color: var(--teal);    border: 1.5px solid #99F6E4; }
+.badge-coral   { background: var(--coral-light);   color: var(--coral);   border: 1.5px solid #FEC5BB; }
+.badge-amber   { background: var(--amber-light);   color: var(--amber);   border: 1.5px solid #FDE68A; }
+.badge-violet  { background: var(--violet-light);  color: var(--violet);  border: 1.5px solid #DDD6FE; }
+.badge-neutral { background: var(--bg-alt);        color: var(--muted);   border: 1.5px solid var(--border); }
+
+.input {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-btn);
+  padding: 8px 14px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+.input:focus {
+  border-color: var(--cobalt);
+  box-shadow: var(--shadow-focus);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.data-table thead {
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+.data-table thead th {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 20px;
+  text-align: left;
+}
+.data-table thead th.r { text-align: right; }
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 120ms;
+}
+.data-table tbody tr:last-child { border-bottom: none; }
+.data-table tbody tr:hover { background: var(--bg); }
+.data-table tbody td {
+  padding: 13px 20px;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.data-table tbody td.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.data-table tbody td.r { text-align: right; }
+.data-table tbody td.dim { color: var(--muted); }
+
+/* Prism backdrop — faint diagonal light leak. Use sparingly on hero panels. */
+.prism-backdrop {
+  position: relative;
+  isolation: isolate;
+}
+.prism-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(60% 40% at 12% 10%,  var(--prism-cobalt) 0%, transparent 70%),
+    radial-gradient(50% 35% at 85% 0%,   var(--prism-violet) 0%, transparent 65%),
+    radial-gradient(40% 30% at 70% 100%, var(--prism-amber)  0%, transparent 70%),
+    radial-gradient(35% 30% at 0% 90%,   var(--prism-cyan)   0%, transparent 70%);
 }

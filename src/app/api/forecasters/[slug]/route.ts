@@ -1,9 +1,7 @@
 // GET /api/forecasters/[slug]
-// Returns a forecaster's profile with their forecast history and accuracy summary.
+// Returns a non-leaky public forecaster profile and coverage summary.
 
-import { db } from "@/lib/db";
-import { forecasters, forecasts, variables, forecastScores } from "@/lib/db/schema";
-import { eq, avg, count } from "drizzle-orm";
+import { getForecasterBySlug, getForecasterPublicProfileData } from "@/lib/forecaster-queries";
 import { z } from "zod";
 import { ok, error, handleError } from "@/lib/api-helpers";
 
@@ -18,34 +16,23 @@ export async function GET(
   try {
     const parsed = slugSchema.safeParse(await params);
     if (!parsed.success) return error("Invalid slug", 400);
-    const { slug } = parsed.data;
 
-    const [forecaster] = await db
-      .select()
-      .from(forecasters)
-      .where(eq(forecasters.slug, slug))
-      .limit(1);
-
+    const forecaster = await getForecasterBySlug(parsed.data.slug);
     if (!forecaster) return error("Forecaster not found", 404);
 
-    // Accuracy summary: average absolute error and score vs consensus per variable
-    const accuracySummary = await db
-      .select({
-        variableId: variables.id,
-        variableName: variables.name,
-        countryCode: variables.countryCode,
-        forecastCount: count(forecasts.id),
-        avgAbsoluteError: avg(forecastScores.absoluteError),
-        avgScoreVsConsensus: avg(forecastScores.scoreVsConsensus),
-      })
-      .from(forecasts)
-      .innerJoin(variables, eq(forecasts.variableId, variables.id))
-      .leftJoin(forecastScores, eq(forecastScores.forecastId, forecasts.id))
-      .where(eq(forecasts.forecasterId, forecaster.id))
-      .groupBy(variables.id, variables.name, variables.countryCode)
-      .orderBy(variables.countryCode, variables.name);
+    const publicProfile = await getForecasterPublicProfileData(forecaster.id);
 
-    return ok({ forecaster, accuracySummary });
+    return ok({
+      forecaster,
+      publicProfile,
+      lockedModules: [
+        "accuracy_by_variable",
+        "accuracy_by_horizon",
+        "consensus_comparison",
+        "vintage_history",
+        "exports",
+      ],
+    });
   } catch (err) {
     return handleError(err);
   }

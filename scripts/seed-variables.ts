@@ -11,6 +11,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { variables, forecasters } from "../src/lib/db/schema";
 import { sql } from "drizzle-orm";
+import { createVariableSlug } from "../src/lib/slugs";
 
 const client = postgres(process.env.DATABASE_URL!);
 const db = drizzle(client);
@@ -138,6 +139,7 @@ async function main() {
   // Build all variable rows: each indicator × each country
   const variableRows = VARIABLE_DEFINITIONS.flatMap((def) =>
     COUNTRY_CODES.map((country) => ({
+      slug: createVariableSlug(def.name, country.code),
       name: def.name,
       countryCode: country.code,
       category: def.category,

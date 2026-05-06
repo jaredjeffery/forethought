@@ -29,7 +29,7 @@ async function main() {
 
   const ingestAll = process.env.WEO_ALL === "1";
   const vintages = ingestAll
-    ? available
+    ? [...available].sort((a, b) => a.publication_date.localeCompare(b.publication_date))
     : [available.find((v) => v.label === (process.env.WEO_VINTAGE ?? available[0].label))].filter(Boolean) as typeof available;
 
   if (vintages.length === 0) {
@@ -40,16 +40,22 @@ async function main() {
   }
 
   let totalInserted = 0;
+  let totalActuals = 0;
   let totalSkipped = 0;
+  let totalMetadataSkipped = 0;
 
   for (const vintage of vintages) {
     console.log(`\nIngesting WEO ${vintage.label} from local files...`);
     try {
       const result = await ingestWeoVintage(vintage);
       console.log(`  Forecasts inserted      : ${result.forecasts_inserted}`);
+      console.log(`  Actuals upserted        : ${result.actuals_upserted}`);
       console.log(`  Rows skipped (no match) : ${result.skipped_no_variable}`);
+      console.log(`  Actuals skipped (metadata): ${result.skipped_actual_metadata}`);
       totalInserted += result.forecasts_inserted;
+      totalActuals += result.actuals_upserted;
       totalSkipped += result.skipped_no_variable;
+      totalMetadataSkipped += result.skipped_actual_metadata;
     } catch (err) {
       console.error(`\nIngestion failed for ${vintage.label}:`, err);
       process.exit(1);
@@ -60,7 +66,9 @@ async function main() {
     console.log(`\n${"=".repeat(50)}`);
     console.log(`Total across ${vintages.length} vintages:`);
     console.log(`  Forecasts inserted      : ${totalInserted}`);
+    console.log(`  Actuals upserted        : ${totalActuals}`);
     console.log(`  Rows skipped (no match) : ${totalSkipped}`);
+    console.log(`  Actuals skipped (metadata): ${totalMetadataSkipped}`);
   }
 
   process.exit(0);

@@ -1,6 +1,5 @@
-// Drizzle ORM schema for Forethought.
-// All tables needed for Phase 1 (Forecast Observatory).
-// Phase 2 tables (content, briefs, subscriptions) will be added later.
+// Drizzle ORM schema for Farfield.
+// Covers the public observatory plus the Phase 2 subscriber access foundation.
 
 import {
   pgTable,
@@ -10,6 +9,7 @@ import {
   numeric,
   boolean,
   integer,
+  jsonb,
   timestamp,
   date,
   unique,
@@ -27,6 +27,17 @@ export const userRoleEnum = pgEnum("user_role", [
   "ANALYST",
   "BUYER",
   "ADMIN",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "INCOMPLETE",
+  "INCOMPLETE_EXPIRED",
+  "TRIALING",
+  "ACTIVE",
+  "PAST_DUE",
+  "CANCELED",
+  "UNPAID",
+  "PAUSED",
 ]);
 
 export const forecasterTypeEnum = pgEnum("forecaster_type", [
@@ -89,6 +100,8 @@ export const forecasters = pgTable("forecasters", {
 
 export const variables = pgTable("variables", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Stable public route identifier, e.g. "gdp-growth-rate-usa".
+  slug: text("slug").notNull().unique(),
   // Short human-readable name, e.g. "GDP Growth Rate"
   name: text("name").notNull(),
   // ISO alpha-3 or aggregate code
@@ -138,6 +151,7 @@ export const forecasts = pgTable("forecasts", {
   // The publication vintage (WEO edition date, etc.) — used to track revisions
   vintage: text("vintage"),
   sourceUrl: text("source_url"),
+  sourceDocumentId: uuid("source_document_id").references(() => sourceDocuments.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("forecasts_variable_period_idx").on(table.variableId, table.targetPeriod),
@@ -173,6 +187,7 @@ export const actuals = pgTable("actuals", {
   releaseNumber: integer("release_number").notNull().default(1),
   // Convenience flag — true for the most recent release of each (variable, period, source)
   isLatest: boolean("is_latest").notNull().default(true),
+  sourceDocumentId: uuid("source_document_id").references(() => sourceDocuments.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   // Multiple releases per (variable, period, source) — scored against release_number = 1 (first release)
@@ -180,6 +195,106 @@ export const actuals = pgTable("actuals", {
     table.variableId, table.targetPeriod, table.source, table.releaseNumber
   ),
 ]);
+
+// ---------------------------------------------------------------------------
+// Source provenance and ingestion audit
+// Records source documents, parser runs, variable mappings, and review flags.
+// ---------------------------------------------------------------------------
+
+export const sourceDocuments = pgTable("source_documents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceName: text("source_name").notNull(),
+  publicationName: text("publication_name").notNull(),
+  publicationDate: date("publication_date").notNull(),
+  vintageLabel: text("vintage_label").notNull(),
+  sourceUrl: text("source_url"),
+  storageUrl: text("storage_url"),
+  fileHash: text("file_hash"),
+  ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  unique("source_documents_source_vintage_unique").on(table.sourceName, table.vintageLabel),
+]);
+
+export const ingestionRuns = pgTable("ingestion_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceDocumentId: uuid("source_document_id").references(() => sourceDocuments.id, { onDelete: "set null" }),
+  sourceName: text("source_name").notNull(),
+  status: text("status").notNull(),
+  recordsCreated: integer("records_created").notNull().default(0),
+  recordsUpdated: integer("records_updated").notNull().default(0),
+  recordsSkipped: integer("records_skipped").notNull().default(0),
+  errors: jsonb("errors"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (table) => [
+  index("ingestion_runs_source_started_idx").on(table.sourceName, table.startedAt),
+]);
+
+export const variableSourceMappings = pgTable("variable_source_mappings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceName: text("source_name").notNull(),
+  sourceVariableCode: text("source_variable_code").notNull(),
+  sourceVariableName: text("source_variable_name"),
+  farfieldVariableId: uuid("farfield_variable_id").notNull().references(() => variables.id, { onDelete: "cascade" }),
+  unitTransform: text("unit_transform"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  unique("variable_source_mappings_unique").on(
+    table.sourceName,
+    table.sourceVariableCode,
+    table.farfieldVariableId,
+  ),
+]);
+
+export const dataQualityFlags = pgTable("data_quality_flags", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id"),
+  severity: text("severity").notNull(),
+  status: text("status").notNull().default("open"),
+  message: text("message").notNull(),
+  sourceDocumentId: uuid("source_document_id").references(() => sourceDocuments.id, { onDelete: "set null" }),
+  ingestionRunId: uuid("ingestion_run_id").references(() => ingestionRuns.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+}, (table) => [
+  index("data_quality_flags_status_idx").on(table.status),
+  index("data_quality_flags_entity_idx").on(table.entityType, table.entityId),
+]);
+
+// ---------------------------------------------------------------------------
+// Subscriptions and Stripe event audit
+// Subscriber access is derived from this table, not from the users.role shortcut.
+// ---------------------------------------------------------------------------
+
+export const subscriptions = pgTable("subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id").notNull().unique(),
+  stripePriceId: text("stripe_price_id"),
+  planKey: text("plan_key").notNull().default("subscriber"),
+  status: subscriptionStatusEnum("status").notNull(),
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  trialEnd: timestamp("trial_end", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("subscriptions_user_status_idx").on(table.userId, table.status),
+  index("subscriptions_customer_idx").on(table.stripeCustomerId),
+]);
+
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  payload: jsonb("payload"),
+});
 
 // ---------------------------------------------------------------------------
 // Scoring methodologies
@@ -237,15 +352,24 @@ export const consensusForecasts = pgTable("consensus_forecasts", {
   id: uuid("id").primaryKey().defaultRandom(),
   variableId: uuid("variable_id").notNull().references(() => variables.id, { onDelete: "cascade" }),
   targetPeriod: text("target_period").notNull(),
+  asOfDate: date("as_of_date").notNull(),
+  methodologyVersion: text("methodology_version").notNull().default("v1.0"),
   // Unweighted mean across all forecasters
   simpleMean: numeric("simple_mean", { precision: 20, scale: 6 }).notNull(),
   // Weighted mean (Phase 2 — null until enough history exists)
   weightedMean: numeric("weighted_mean", { precision: 20, scale: 6 }),
   // How many forecasters contributed to this consensus
-  nForecasters: integer("n_forecasters").notNull(),
+  nForecasters: integer("n_forecasters").notNull().default(0),
+  includedForecastCount: integer("included_forecast_count").notNull(),
+  sourceDocumentId: uuid("source_document_id").references(() => sourceDocuments.id),
   computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  unique("consensus_variable_period_unique").on(table.variableId, table.targetPeriod),
+  unique("consensus_variable_period_asof_method_unique").on(
+    table.variableId,
+    table.targetPeriod,
+    table.asOfDate,
+    table.methodologyVersion,
+  ),
 ]);
 
 // ---------------------------------------------------------------------------

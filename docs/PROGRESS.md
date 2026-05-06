@@ -1,4 +1,547 @@
-# Forethought — Progress Log
+﻿# Farfield — Progress Log
+
+## Session 2026-05-06
+
+### Completed
+
+- Brainstormed the forecaster profile redesign using a browser-based visual companion.
+- Chose a universal modular profile model rather than separate individual/institution templates.
+- Settled on a fixed Farfield trust spine: compact side score rail, flexible middle widgets, and a fixed bottom recommendations section.
+- Decided customer proof should be text-only verified recommendations, not star ratings or numeric customer scores.
+- Wrote `docs/superpowers/specs/2026-05-06-forecaster-profile-redesign.md` for review.
+- Wrote `docs/superpowers/plans/2026-05-06-forecaster-profile-redesign.md` after spec approval.
+- Updated `docs/BUILD_PLAN.md` so the main platform spec reflects the approved profile direction.
+- Added `.superpowers/` to `.gitignore` so local brainstorming mockups do not enter source control.
+
+### Current state
+
+- No app code has been changed for this redesign yet.
+- The profile redesign spec is approved and an implementation plan is ready.
+- Existing public profile implementation remains unchanged and non-leaky.
+
+### Known issues
+
+- Recommendation storage and moderation do not exist yet because transaction-backed marketplace purchases are not live.
+- Exact public score/rank labels still need final copy decisions.
+- Studio profile customisation remains future work.
+
+### Next steps
+
+1. Choose execution mode for the implementation plan.
+2. Implement the redesigned public profile in small, testable increments.
+3. Review real seeded institution profiles in-browser after the first implementation pass.
+
+## Claude handoff snapshot — 2026-05-03
+
+Read this before continuing work:
+
+- Primary build reference: `docs/BUILD_PLAN.md`
+- Live execution/status reference: this file, `docs/PROGRESS.md`
+- Current branch: `codex/phase-0-5-data-integrity`
+- Latest commit at handoff: see `git log -1` (Phase 1 design + content pass committed 2026-05-03)
+- Local dev URL: `http://127.0.0.1:3000`
+- Current phase: Phase 2 subscriber data product, billing/access foundation implemented
+- Current priority: review the new variable-page chart workbench in-browser, then add CSV exports and start the subscriber dashboard/watchlist
+- Public surface now follows the Farfield Design System (Prism token layer): warm porcelain bg, cobalt primary, Instrument Serif display + DM Sans body + JetBrains Mono numerals, brand lockup in the top-right of the header, prismatic data viz across homepage, variable detail, and forecaster profile pages
+
+Latest update:
+
+- Removed the `Recent Actuals` card grid from `/variables/[slug]`; actual values should be discovered through chart hover/tooltips, with CSV export as the subscriber path for tabular data.
+- `getForecastDataAccess()` now fails closed to public access in local development if Auth.js cannot initialize because `AUTH_SECRET` is missing, so public variable pages do not 500 during local preview.
+- Started the variable-page refactor: `/variables/[slug]` now has a public top-forecasters panel based on aggregate MAE/sample size, one main chart workbench, and subscriber-only controls for start/end period plus basic consensus, public institutions, and my forecasters.
+- Variable-page actual selection now prefers WEO-carried actuals when multiple actual sources exist for the same period, so legacy World Bank reference rows do not appear in the rendered GDP page or chart payload when WEO exists.
+- Added first-draft variable-page scaffolding for other periods/frequencies, next official release, related variables, and leading signals. These are visible planning modules until backing tables and source-calendar ingestion exist.
+- Renamed the public `/variables` directory language to "Indicators" while keeping `variables` as the internal route/table name. The directory now filters by country, category, and frequency.
+
+### Current product surface
+
+Public routes currently implemented:
+
+- `/` — editorial-first homepage with lead story, top stories, Leading Indicators, Forecaster Spotlight, Farfield Blog, public actuals chart, compact source/coverage record strip, and locked subscriber preview
+- `/articles` and `/articles/[slug]` — static Farfield editorial/mock article pages using `src/lib/content.ts` and `ArticleVisual`
+- `/variables` and `/variables/[slug]` — public actuals-only variable directory/detail pages using slugs, with forecast coverage counts and locked premium modules
+- `/variables/[slug]` — subscriber/admin branch now includes a first-draft premium forecast view with target/as-of selectors, basic consensus, public institution series, and request-coverage/research panels
+- `/forecasters` and `/forecasters/[slug]` — public non-leaky institution/forecaster directory and profiles with coverage/trust signals, not detailed score tables
+- `/methodology` — methodology overview
+- `/methodology/scoring` — scoring, horizon, vintage, and public-vs-subscriber score publication rules
+- `/methodology/data-sources` — source documents, ingestion runs, variable mappings, WEO actuals policy, and data quality boundaries
+- `/methodology/institutions` — Farfield-managed vs claimed profile rules and protected trust-panel fields
+- `/methodology/[slug]` — supporting methodology notes from the content registry
+- `/pricing` — public early-access/subscriber promise page, no Stripe checkout yet
+- `/admin/data-qa` — admin/dev-only QA page for provenance, ingestion runs, mappings, flags, and score references
+
+### What is done
+
+- Phase 0.5 data integrity foundation is implemented:
+  - `source_documents`
+  - `ingestion_runs`
+  - `variable_source_mappings`
+  - `data_quality_flags`
+  - source-document links on forecasts/actuals
+  - consensus as-of snapshots with methodology version and included forecast count
+  - server-side access helpers for forecast/consensus endpoints
+  - leakage tests for public/free boundaries
+  - internal data QA script/page
+- Phase 1 public showcase is mostly implemented:
+  - slugged variable routes
+  - editorial homepage
+  - articles
+  - forecaster directory/profiles
+  - variable pages
+  - methodology overview/subpages
+  - pricing page
+  - public CTAs for subscriber access
+
+### Data/scoring state
+
+- Current DB uses WEO-carried national-authority/historical observations as the active actuals baseline for core macro scoring where available.
+- WEO 2026-Apr ingestion was rerun after parser fixes.
+- WEO is now the scoring actual for 5,906 scored rows.
+- World Bank-coded scoring fallback is retired: 0 `forecast_scores` rows use World Bank actuals.
+- Existing World Bank actual rows remain only as legacy reference/QA data unless a future variable is explicitly defined around a World Bank indicator.
+- Forecasts without an eligible WEO-carried or direct national-authority actual remain unscored rather than falling back to World Bank Indicators.
+- OECD and ECB ingestion now records provenance metadata.
+- World Bank GEP forecast ingestion may still be used as a forecast source, but World Bank Indicators are legacy/reference-only for core macro actuals.
+
+### Billing/subscriber state
+
+- Migration `0005_phase_2_subscriptions` has been generated and applied to the configured database.
+- `subscriptions` records Stripe customer/subscription IDs, plan key, status, current period, cancellation, and trial timestamps.
+- `stripe_webhook_events` records processed Stripe event IDs and payloads for webhook idempotency.
+- `/api/billing/checkout` creates a Stripe subscription Checkout session for signed-in users.
+- `/api/billing/portal` opens Stripe Billing Portal for users with a linked Stripe customer.
+- `/api/stripe/webhook` verifies Stripe signatures, ignores duplicate events, and syncs subscription state on checkout and customer subscription events.
+- Premium forecast/consensus access now requires an active or trialing subscription with a future current period, or `ADMIN`; `BUYER` role alone no longer unlocks premium data.
+- Local dev now has `/api/dev/admin-login`, which sets a development-only Farfield admin cookie for previewing subscriber/admin UI when Google OAuth or `AUTH_SECRET` is not configured.
+
+### Premium variable-page state
+
+- `docs/BUILD_PLAN.md` Phase 2.2 now explicitly avoids teaser-heavy subscriber pages: no locked private-forecaster series and no locked report cards in the subscriber variable view.
+- Basic Farfield consensus is included for all subscribers; Farfield weighted consensus is reserved for a later premium/institutional product.
+- `/variables/[slug]` is now dynamic so subscriber/admin content is not served from public cache.
+- Subscriber/admin users see the first draft chart workbench on variable detail pages.
+- The chart now uses start/end period controls plus layer toggles for basic consensus, public institutions, and my forecasters.
+- Public institution series come from institutional forecaster rows for that variable. "My forecasters" is present as a disabled/empty layer until forecaster subscription/product entitlement tables exist.
+- The subscriber branch adds a "Research on this variable" panel using existing Farfield editorial and a "Request coverage" action.
+- Public users still see only the public subscriber preview; no premium forecast/consensus values are queried for public requests.
+- The previous `Recent Actuals` card grid has been removed to keep the variable page chart-led rather than duplicating values in a space-heavy table-like layout.
+- The old repeated `At a Glance` and `Actuals History` chart sections have been replaced by the single workbench. Public/free users get actuals-only; subscribers get plan-aware forecast layers.
+- Public top-forecaster ranking currently requires at least three scored forecasts for that variable to avoid ranking one-off samples as leaders.
+- Variable pages now show planned modules for other period types, release calendar, related variables, and leading signals; future schema should replace the temporary page-level helper with `variable_families`, `variable_relationships`, `leading_indicator_links`, and `data_release_calendar`.
+- `/variables` remains the technical route, but public navigation and directory copy now use "Indicators" for clearer reader-facing language.
+
+### Verification commands
+
+Run these before handing work back:
+
+```powershell
+npx tsc --noEmit
+npm run build
+$env:QA_STRICT='1'; node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts
+```
+
+Optional actual-source QA:
+
+```powershell
+node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-actuals-sources.ts
+```
+
+Recent verification status:
+
+- `npx tsc --noEmit` passes
+- `npm run build` passes
+- `http://127.0.0.1:3000/variables/gdp-growth-rate-usa` renders without the `Recent Actuals` section after the local Auth.js development fallback
+- Public GDP variable HTML no longer includes World Bank actual-source rows after WEO preference; admin/dev preview shows subscriber chart controls and forecast layers.
+- `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-subscription-access.ts` passes
+- `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-actuals-sources.ts` passes with 0 World Bank-backed score rows
+- strict data QA passes with 0 attention runs, 0 running imports, 0 open quality flags, 0 score reference issues, 0 latest source docs missing hashes, and 0 latest source docs without linked rows
+- leakage tests pass against the built app and current database
+
+### Access-control rules to preserve
+
+Public/free pages must not expose:
+
+- forecast values
+- paid consensus values
+- private/commercial forecaster values
+- vintage history values
+- dispersion values
+- reconstructive chart data
+- detailed per-forecaster score tables
+- hidden JSON/chart props/hydration payloads containing the above
+
+Public pages may show:
+
+- actual outcomes and actuals history
+- source labels
+- coverage counts
+- whether forecast coverage exists
+- institution/forecaster profiles
+- methodology
+- public editorial
+- locked premium modules
+
+### Next recommended steps
+
+1. Browser-review and iterate the Phase 2.2 premium variable-page first draft:
+   - chart selector ergonomics
+   - target-period defaults
+   - how actuals should display on an expectation-over-time chart
+   - research panel relevance
+   - request-coverage wording/workflow
+2. Add the next premium variable modules:
+   - exports/downloads for accessible series
+   - subscriber-only ranking/detail panels
+   - dispersion once the included forecast set is clear
+3. Final Phase 1 public-page polish pass:
+   - Homepage: tune editorial spacing/order after browser review
+   - Articles: decide whether mock content is enough for Phase 1 or should be pared down
+   - Variables: make locked premium modules and pricing CTA feel consistent
+   - Forecasters: review profiles for profile text, trust panels, and non-leaky coverage presentation
+   - Methodology/pricing: quick copy polish and link audit
+4. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape.
+5. If World Bank GEP forecast ingestion remains active, add Phase 0.5 provenance/audit support to that forecast pipeline only; do not revive World Bank Indicators as a macro actuals fallback.
+
+### Worktree warning
+
+The repo has unrelated modified/untracked files that predate or sit outside the latest scoped commits. Do not revert them without explicit approval. Before making a new PR or release branch, inspect:
+
+```powershell
+git status --short
+```
+
+Key recent commits on `codex/phase-0-5-data-integrity`:
+
+- `8a2a8fe` Add Phase 0.5 data integrity foundation
+- `045fe23` Use WEO metadata actuals for scoring baseline
+- `a7bbb6a` Make public forecaster pages non-leaky
+- `4bb74c2` Add public leakage test script
+- `20569b0` Align landing page with public access model
+- `60bedca` Add OECD and ECB ingestion provenance
+- `fc87660` Add internal data QA checks
+- `2b62e0b` Allow local data QA preview
+- `5e22055` Fix WEO CSV actual parsing
+- `fd845ed` Add variable slugs
+- `c5e2610` Rebuild public homepage
+- `edcecc5` Add public editorial and methodology pages
+- `ac37148` Mock editorial front page
+- `d71f7fb` Make homepage editorial first
+- `4921fc0` Add public pricing page
+- `4a6481c` Add methodology subpages
+
+## Session 2026-05-03
+
+### Completed
+
+**Phase 2.1 subscriber billing/access foundation**
+- Added `subscriptions` and `stripe_webhook_events` schema plus migration `0005_phase_2_subscriptions`
+- Applied the migration to the configured database with `npm run db:migrate`
+- Added Stripe helpers in `src/lib/payments/stripe.ts` for client configuration, price ID lookup, app URL handling, and subscription upserts
+- Added `/api/billing/checkout` to create Stripe subscription Checkout sessions for signed-in users
+- Added `/api/billing/portal` to create Stripe Billing Portal sessions for users with a linked customer
+- Added `/api/stripe/webhook` with signature verification, processed-event idempotency, and subscription sync for checkout/subscription events
+- Updated premium forecast access so active/trialing subscription records unlock subscriber data; `ADMIN` remains an override; `BUYER` role alone no longer grants access
+- Added `scripts/qa-subscription-access.ts` to verify role-only users are blocked, active/trialing subscriptions pass, and cancelled/expired subscriptions fail
+- Added `STRIPE_SUBSCRIBER_PRICE_ID` to `.env.example` and `docs/BUILD_PLAN.md`
+
+**Phase 2.2 premium variable-page first draft**
+- Updated `docs/BUILD_PLAN.md` so subscriber variable pages include basic consensus, public institutions, and my forecasters without locked private forecast teasers
+- Added `src/components/variables/PremiumVariableChart.tsx` with target-period and as-of selectors plus layer toggles for basic consensus, public institutions, and my forecasters
+- Updated `/variables/[slug]` to render a subscriber/admin-only forecast view backed by consensus snapshots and institutional forecast rows
+- Kept public requests non-leaky by only fetching premium chart data after `canAccessPremiumForecastData(access)` passes
+- Added subscriber-side research and request-coverage panels; no locked report cards are shown in the subscriber branch
+- Forced `/variables/[slug]` dynamic to avoid auth-specific premium content being cached into public responses
+
+**Local admin login workaround**
+- Added `/api/dev/admin-login`, enabled only in development or when `ENABLE_DEV_ADMIN_LOGIN=1`, to create a local admin session and set a `farfield-dev-admin` cookie
+- Added a "Continue as dev admin" button on `/signin` when the workaround is enabled
+- Updated premium forecast access to trust the local dev admin cookie only in development before falling back to Auth.js/subscription checks
+- Verified the dev admin cookie shows the `Subscriber Forecast View` on `/variables/gdp-growth-rate-usa`
+
+**World Bank actuals fallback retired**
+- Updated `src/lib/scoring/index.ts` so core macro scoring excludes World Bank actuals instead of using them as a fallback when WEO is missing
+- Added `scripts/retire-world-bank-score-fallbacks.ts` as a one-off cleanup script for any environment that still has score rows linked to World Bank actuals
+- Updated `scripts/qa-actuals-sources.ts` so `QA_STRICT=1` fails if any `forecast_scores` row links to a World Bank actual
+- Ran the cleanup script against the configured database; it found no remaining World Bank-backed score rows in the current DB
+- Verified strict actual-source QA: 5,906 scored rows use `IMF-WEO`, 0 scored rows use World Bank actuals
+- Updated `docs/BUILD_PLAN.md` and `docs/FORECAST_GATHERING_PLAN.md` to mark World Bank Indicators as legacy/reference-only for core macro actuals
+
+**Design system applied across the public surface**
+- Rewrote `src/app/globals.css` around the Farfield Design System Prism token layer: warm porcelain `#F7F6F2` bg, cobalt `#2952CC` primary, full Prism palette (cobalt, cyan, violet, coral, amber, teal, marigold, vermilion), light-leak overlays, type scale, spacing/radius/shadow tokens, and reusable component classes (`.card`, `.card-raised`, `.section-label`, `.accent-rule`, `.btn-primary`, `.btn-secondary`, `.badge-*`, `.data-table`, `.prism-backdrop`)
+- Aliased older Tailwind class names (`accent`, `accent-light`, `border-dark`, `signal-green/red/orange`) to the new Prism tokens so existing pages adopted the new look without per-file rewrites
+- Switched fonts in `src/app/layout.tsx` from Playfair / Inter / Geist Mono to Instrument Serif / DM Sans / JetBrains Mono per the design system spec
+- Reworked `src/app/(public)/layout.tsx`: 68px header with nav links on the left, Sign-in pill + Farfield brand lockup on the right; header bg switched to `bg-bg/85` so the lockup PNG blends with the warm page bg
+- Copied the Farfield brand lockup to `public/brand/farfield-lockup.png` for use as the rightmost header element
+
+**Data visualisation primitives added**
+- New `src/components/viz/Sparkline.tsx`: pure SVG sparkline with optional zero baseline and last-point dot
+- New `src/components/viz/ActualsBars.tsx`: divergent bar chart for actuals, latest bar highlighted (cobalt above zero, coral below)
+- New `src/components/viz/CoverageMatrix.tsx`: institutions × variables grid with rotated column headers
+- New `src/components/viz/PrismDial.tsx`: eight-wedge radial signature for institution and forecaster shapes
+- Updated `src/components/ForecastChart.tsx` to use Prism chart-series tokens and added optional dispersion-band rendering for future subscriber views
+- All viz primitives are pure SVG, server-rendered, and never carry forecast or consensus values
+
+**Public homepage rebuilt with prismatic data viz**
+- Replaced the stat strip with a hero panel containing an `ActualsBars` chart of World GDP actuals, latest reading, source label, and link to the variable
+- Added a "Signal Grid" section: six variable cards driven by `Sparkline`
+- Added a "Coverage" panel showing the new `CoverageMatrix` (5 institutions × 12 country×indicator combos)
+- Added an "Institution Signature" panel using `PrismDial` for the top eight institutions weighted by forecasts tracked
+- Kept the editorial structure (lead article, top stories, leading indicators, forecaster spotlight, blog) and re-styled around the new tokens
+
+**Variable and forecaster detail pages rebuilt with viz**
+- `src/app/(public)/variables/[slug]/page.tsx`: hero card with `Sparkline` + delta-vs-prior-period, "At a Glance" `ActualsBars`, full actuals chart, source-breakdown bars, recent-actuals grid, and a subscriber-preview section with a clear list of locked detail
+- `src/app/(public)/forecasters/[slug]/page.tsx`: hero with `PrismDial` indicator signature, four-card public trust panel, coverage-by-indicator with proportional bars, geo-grid heatmap for country coverage, latest vintages, and a subscriber-detail card with `btn-primary` request-access CTA
+
+**Articles and methodology copy rewritten**
+- Replaced the eight launch articles in `src/lib/content.ts` with stronger editorial: oil-prices piece carries twenty-year median absolute errors and revision-quality framing; African-GDP article distinguishes informality vs revisions vs base-year rebases; satellite article cites NDVI correlations and a 2026 watchlist; freight piece carries an explicit pass-through elasticity number; institution spotlight names which institution is best on which slice; "first public record" describes coverage by source and what every row knows about itself; GDP-surprises explainer walks through three different misses with the same headline number; "actuals before rankings" lists three avoidable mistakes most leaderboards make
+- Replaced the three methodology notes with sharper substance: WEO actuals note explains the carrier-vs-authority distinction; consensus note clarifies what consensus actually answers and why snapshots are not averages; leakage-boundary note enumerates allowed/forbidden public fields and how the line is enforced
+- Rewrote `src/components/ArticleVisual.tsx`: each article kind is now a topic-tuned SVG composition (oil dispersion band, Africa GDP vintage-shift bars, satellite NDVI heatmap, leading-indicator dashboard, IMF prism dial, GDP revision-line family, forecast→actual→method linkage diagram, source-record bars)
+
+**Polish across remaining list pages**
+- `src/app/(public)/variables/page.tsx`, `forecasters/page.tsx`, `pricing/page.tsx`: replaced inline button shadow hacks with `btn-primary` / `btn-secondary` classes, swapped header treatments to use `section-label` + `accent-rule`
+
+**Verification**
+- `npx tsc --noEmit` passes
+- `npm run build` clean (29 static pages generated, all routes ≤216 kB First Load JS)
+- `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts` passed after the design pass and again after the header restructure
+- Live preview confirmed token application: body bg `#F7F6F2`, ink `#18181B`, cobalt `#2952CC`, body font DM Sans, hero h1 Instrument Serif
+
+### Current state
+
+- Public surface uses the Farfield Design System token layer end-to-end
+- Header carries the brand lockup in the top right; nav links on the left
+- Homepage, variable detail, and forecaster profile pages all carry first-class data visualisations built from server-rendered SVG primitives
+- Article and methodology copy carries real economic substance and a point of view
+- All Phase 0.5 data integrity guarantees intact: leakage tests pass, no forecast values on public/free pages, no consensus values exposed except where actuals are public
+- Phase 2.1 subscription schema/routes/access policy are in place and verified locally
+- Phase 2.2 premium variable-page first draft is implemented behind subscriber/admin access
+
+### Known issues
+
+- Local dev environment has an empty `AUTH_SECRET=""` in `.env.local`, which causes Auth.js/Google OAuth to fail. For now, use `/api/dev/admin-login?callbackUrl=/variables/gdp-growth-rate-usa` or the "Continue as dev admin" button on `/signin` to preview admin/subscriber UI. A real `AUTH_SECRET` should still be added before relying on OAuth.
+- Stripe checkout/portal require real `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_SUBSCRIBER_PRICE_ID` values before they can be tested end-to-end against Stripe.
+- "My forecasters" is an empty/disabled premium variable chart layer until forecaster subscription/product entitlement tables exist in Phase 3.
+- The research panel currently uses static Farfield editorial matching heuristics; report/product-backed research feeds need the content/marketplace schema later.
+- World Bank-coded score fallback is retired: strict actual-source QA now reports 0 `forecast_scores` rows using World Bank actuals.
+- World Bank GEP forecast ingestion still lacks Phase 0.5 provenance/audit treatment if it remains active, but World Bank Indicators are legacy/reference-only for core macro actuals.
+
+### Next steps
+
+1. Browser-review and iterate the premium variable-page first draft, especially chart controls and the expectation-over-time chart shape
+2. Add export/download for accessible subscriber series
+3. Add subscriber-only ranking/detail panels and dispersion after the included-series model is stable
+4. Add Phase 2 subscriber dashboard/watchlist after premium variable pages have a stable data shape
+5. Add Phase 0.5 provenance to World Bank GEP forecast ingestion only if that source remains active
+
+## Session 2026-05-02
+
+### Completed
+
+**BUILD_PLAN.md revised around data integrity and non-leaky public trust**
+- Added Phase 0.5: Data Integrity Hardening before the public showcase phase
+- Updated stale schema references: `analyst_performance` -> `forecaster_performance`; `transactions.analyst_id` -> `transactions.seller_forecaster_id`
+- Added source/audit schema guidance: `source_documents`, `ingestion_runs`, `variable_source_mappings`, `data_quality_flags`
+- Strengthened consensus model with `as_of_date`, `methodology_version`, `included_forecast_count`, and historical snapshot preservation
+- Replaced free-tier latest-forecast exposure with a stricter teaser/coverage model
+- Reworked build sequence, acceptance tests, and success metrics around leakage prevention, ingestion auditability, and subscriber value
+
+**Phase 0.5 code started**
+- Added Drizzle schema and migration `0003_phase_0_5_data_integrity` for source documents, ingestion runs, variable source mappings, data quality flags, source document links, and consensus as-of snapshots
+- Updated consensus computation to write `as_of_date`, `methodology_version`, and `included_forecast_count` while preserving the legacy `n_forecasters` column for compatibility
+- Added server-side forecast data access helper and gated `/api/forecasts` plus `/api/consensus` behind subscriber/admin access
+- Changed `/api/variables/[id]` and public variable detail pages to expose actuals plus coverage counts, not forecast values or consensus chart data
+- Fixed existing TypeScript/lint issues in `oecd-eo.ts` and `apply-migration.ts` so the build can pass
+
+**Forecast gathering plan tightened around actuals sources**
+- Updated `FORECAST_GATHERING_PLAN.md` to make WEO-carried national-authority/historical observations the default actuals source for the core cross-country macro panel until direct national-authority ingestion exists
+- Clarified that WEO actual rows should come from WEO source/status metadata, not target-year inference alone or undifferentiated IMF values
+- Added a guardrail that World Bank Indicators are not the default actuals provider for core macro scoring
+- Added a correction item to replace legacy World Bank actuals with WEO/national-authority actual vintages and rescore affected forecasts
+
+**WEO actuals baseline corrected**
+- Updated `src/lib/ingestion/imf-weo.ts` to ingest WEO-carried actuals when metadata supports actual/historical classification
+- WEO ingestion now records `source_documents`, `ingestion_runs`, `variable_source_mappings`, and source-document links on forecasts/actuals
+- Added `scripts/qa-actuals-sources.ts` for actual-source and score-baseline QA
+- Updated scoring to prefer `IMF-WEO` first-release actuals over legacy World Bank rows when both exist for the same variable/period
+- Ran latest WEO ingestion for 2026-Apr: 6,773 WEO actual rows upserted, 0 new forecasts, 752 rows skipped for no matching variable
+- Ran bulk rescore: 5,697 scored, 7,478 skipped because no matching actual exists
+- QA after rescore: 5,194 scores now use `IMF-WEO`; 503 still use World Bank rows where WEO-carried actuals did not win for that variable/period
+
+**Public institution pages de-leaked**
+- Reworked `/forecasters` to show public coverage signals only: status, forecasts tracked, scored sample, variables, and countries
+- Reworked `/forecasters/[slug]` to show a public trust panel, coverage by indicator/country, latest vintages, and locked subscriber-detail modules
+- Updated `/api/forecasters/[slug]` so public JSON no longer returns MAE, bias, or score-vs-consensus fields
+- Added `getForecasterPublicProfileData()` for non-leaky public profile data while leaving detailed profile metrics available for future subscriber/admin surfaces
+- Verified IMF public profile helper output contains counts/coverage/vintages only; `npm run build` passes
+
+**Leakage tests added**
+- Added `scripts/leakage-tests.ts`, which starts a local production Next server and checks public HTTP responses against real DB samples
+- Tests verify public forecaster API/page responses do not expose sampled forecast/consensus values or detailed accuracy fields
+- Tests verify public variable API/page responses do not expose forecast/consensus fields while still allowing actuals
+- Tests verify `/api/forecasts` and `/api/consensus` return 403 for public access
+- Verified with `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts` and `npx tsc --noEmit`
+
+**Landing page aligned with revised public model**
+- Removed the public accuracy leaderboard and MAE exposure from `/`
+- Rebuilt the landing page around actuals-only GDP previews, institution coverage counts, scored sample sizes, and locked subscriber-detail framing
+- Updated landing copy so public users see source depth and methodology while current forecast values, consensus history, dispersion, rankings, and exports remain premium
+- Extended leakage tests to cover the landing page and fail on old leaderboard/MAE terms
+- Verified with `npm run build` and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**OECD/ECB ingestion provenance added**
+- Added shared ingestion provenance helpers for source-document upserts, ingestion-run lifecycle records, variable-source mappings, response hashing, and parse-error serialization
+- Updated OECD Economic Outlook ingestion to create/update `source_documents`, write `ingestion_runs`, refresh `source_document_id` on forecasts, and preserve explicit variable mappings
+- Updated ECB MPD ingestion to create/update `source_documents`, write `ingestion_runs`, refresh `source_document_id` on forecasts, and preserve explicit variable mappings
+- Changed OECD/ECB import scripts to report created and updated forecast counts separately
+- Smoke-tested OECD EO 118 and ECB MPD A25 re-ingestion: 0 new rows, 111 existing forecast rows refreshed with provenance
+- Verified with `npx tsc --noEmit`, `npm run build`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Minimal internal data QA added**
+- Added admin-only `/admin/data-qa` page for reviewing source documents, ingestion runs, variable mappings, data quality flags, and recent score outputs
+- Added shared `getDataQaSnapshot()` helper so QA checks can be reused by UI and scripts
+- Added `scripts/qa-data-integrity.ts` with normal and `QA_STRICT=1` modes for terminal review before publishing/scoring work
+- Extended leakage tests so logged-out users must be redirected away from `/admin/data-qa`
+- Current QA result: 0 failed/skipped attention runs, 0 running imports, 0 open quality flags, 0 score reference issues, 0 latest source docs missing hashes, 0 latest source docs without linked rows
+- Verified with `npx tsc --noEmit`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, `npm run build`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**WEO parser fixed for missing national-authority actuals**
+- Fixed new WEO CSV parsing so quoted multiline fields no longer cause country rows to be skipped
+- Fixed WEO country-group detection so ISO country codes beginning with `G` (for example `GBR`) are not mistaken for group codes
+- Added conservative fiscal-year latest-actual parsing, including `FY(t-1/t) = CY(t)` handling from WEO methodology notes
+- Re-ingested WEO 2026-Apr and rescored all forecasts
+- Result: World Bank-coded scored rows fell from 503 to 45; IMF-WEO scored rows rose to 5,906
+- Remaining World Bank-scored rows are narrow fallback cases: Malaysia/Thailand/India unemployment and Thailand fiscal variables where WEO does not provide an unambiguous matching actual under the current rules
+- Verified with `scripts/qa-actuals-sources.ts`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, `npm run build`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Phase 1 variable slug migration started**
+- Added `variables.slug`, generated from variable name plus country code, with a backfilled unique migration
+- Updated public variable route from `/variables/[id]` to `/variables/[slug]`
+- Updated variable API route from `/api/variables/[id]` to `/api/variables/[slug]`
+- Updated homepage, variable directory links, seed data, commodity ingestion, and leakage tests to use variable slugs
+- Applied migration `0004_variable_slug_migration` to the configured database
+- Restarted the local dev server and verified `/variables/gdp-growth-rate-wld` returns 200
+- Verified with `npx tsc --noEmit`, `npm run build`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Phase 1 homepage rebuild started**
+- Rebuilt `/` around the revised Phase 1 public showcase model: Farfield hero, live source/coverage metrics, editorial preview cards, actuals-only macro cards, institution spotlight, methodology notes, and locked premium modules
+- Homepage data now uses actuals, source documents, coverage counts, and scored-row counts without exposing forecast values, consensus values, MAE, bias, or reconstructive chart payloads
+- Restarted the local dev server and verified `http://127.0.0.1:3000/` returns 200
+- Verified with `npx tsc --noEmit`, `npm run build`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Phase 1 articles, methodology, and homepage visuals added**
+- Added static public content registry for launch articles and methodology notes until a content schema/CMS exists
+- Added `/articles`, `/articles/[slug]`, `/methodology`, and `/methodology/[slug]`
+- Added public navigation links for Articles and Methodology
+- Added an actuals-only homepage chart for a featured macro variable
+- Added a locked subscriber carousel preview for forecast-versus-consensus analysis without exposing real forecast or consensus values
+- Extended leakage tests to cover public article and methodology routes
+- Restarted the local dev server and verified `/`, `/articles`, `/articles/first-public-forecast-record`, `/methodology`, and `/methodology/weo-national-authority-actuals` return 200
+- Verified with `npx tsc --noEmit`, `npm run build`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Phase 1 editorial mock front page added**
+- Expanded mock article slate with oil price forecast volatility, African GDP forecasting difficulty, satellite crop-yield indicators, shipping/freight signals, and a recurring Forecaster Spotlight concept
+- Added `ArticleVisual` to give article cards chart-like public visuals without using paid forecast or consensus values
+- Reworked the homepage editorial area into a lead story, top stories, Leading Indicators row, Forecaster Spotlight feature, and Farfield Blog strip
+- Updated `/articles` and article detail pages to use the same visual system
+- Restarted the local dev server and verified `/`, `/articles`, `/articles/oil-price-forecast-volatility`, `/articles/forecasting-gdp-in-african-states`, and `/articles/satellite-data-crop-yields` return 200
+- Verified with `npx tsc --noEmit`, `npm run build`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Phase 1 pricing page added**
+- Added `/pricing` as a public early-access/subscriber promise page
+- Added public navigation link for Pricing
+- Defined public reader, Farfield subscriber, and team access plan cards without enabling Stripe checkout yet
+- Added public/subscriber comparison table for actuals, methodology, coverage counts, consensus, forecast series, vintage history, comparisons, and exports
+- Added pricing CTAs from the homepage subscriber preview, public variable detail pages, and article detail pages
+- Extended leakage tests to include `/pricing`
+- Restarted the local dev server and verified `/`, `/pricing`, `/articles/oil-price-forecast-volatility`, and `/variables/gdp-growth-rate-wld` return 200
+- Verified with `npx tsc --noEmit`, `npm run build`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+**Phase 1 methodology subpages added**
+- Added `/methodology/scoring` for score links, forecast/actual/methodology references, horizon handling, and public-vs-subscriber score publication rules
+- Added `/methodology/data-sources` for source documents, ingestion runs, variable mappings, data quality flags, WEO-carried national-authority actuals, fiscal-year handling, and public access boundaries
+- Added `/methodology/institutions` for Farfield-managed profiles, claimed institution profiles, independent forecaster profiles, editable fields, and protected trust-panel fields
+- Updated `/methodology` to feature the three core methodology pages above the supporting notes
+- Extended leakage tests to cover the new methodology routes
+- Restarted the local dev server and verified `/methodology`, `/methodology/scoring`, `/methodology/data-sources`, and `/methodology/institutions` return 200
+- Verified with `npx tsc --noEmit`, `npm run build`, `QA_STRICT=1 node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/qa-data-integrity.ts`, and `node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/leakage-tests.ts`
+
+### Current state
+
+- Build plan now prioritises provenance, access control, consensus history, and minimal internal QA before expanding public UI
+- Phase 0.5 schema/access/code changes are implemented locally
+- `npm run build` passes
+- `npm run score` has no pending forecasts after the WEO baseline correction
+- Migration `0003_phase_0_5_data_integrity` applied successfully to the configured database
+- Consensus recomputed after migration: 2,513 snapshot rows
+- Database actuals after WEO correction: 10,954 `IMF-WEO` actual rows plus legacy World Bank rows retained for comparison/exceptions
+- Public institution pages now match the Phase 1 non-leaky teaser model
+- Leakage test script passes against the built app and current database
+- Landing page now matches the Phase 1 non-leaky public showcase model
+- OECD and ECB forecast ingestion now records source documents, ingestion runs, source hashes, and reviewable variable mappings
+- Admin data QA page and terminal QA script are available for internal review
+- WEO is now the scoring actual for 5,906 scored rows; World Bank-coded scoring fallback is down to 45 narrow cases
+- Variable public URLs now use readable slugs instead of UUIDs
+- Homepage now reflects the Phase 1 public showcase direction with article previews, actuals-only variable cards, institution trust signals, and locked premium detail modules
+- Articles and methodology now have real public routes backed by a static content registry
+- Homepage has a public actuals-only chart and a locked subscriber forecast-versus-consensus carousel preview
+- Homepage now has a stronger editorial front-page structure with mock analysis, Leading Indicators, Forecaster Spotlight, and Farfield Blog sections
+- Pricing page is live as a non-checkout early-access page that explains subscriber value and links locked modules to the future paid data product
+- Methodology section now has overview, scoring, data sources, institutions, and supporting methodology-note pages
+- Existing worktree already had unrelated modified/untracked files before this session
+
+### Known issues
+
+- World Bank ingestion still needs the Phase 0.5 provenance/audit treatment, or it should be explicitly downgraded to a legacy/reference-only source for core macro scoring
+- 45 scores still use World Bank-coded actuals where WEO does not currently provide an unambiguous matching actual under the current rules
+- Leakage tests currently cover public forecaster and variable pages/APIs; extend them as new public/free routes are added
+
+### Next steps
+
+1. Decide whether the remaining 45 World Bank-scored rows should stay as explicit fallback exceptions, become data quality flags, or wait for direct national-authority ingestion
+2. Do a final Phase 1 public-page polish pass across homepage, articles, methodology, pricing, variables, and forecaster profiles
+3. Extend leakage tests as new public/free routes are added
+4. Wire World Bank ingestion into provenance/audit tables only if it remains part of the active data pipeline
+5. Prepare a clean branch/commit/PR once unrelated working-tree changes are separated
+
+## Session 2026-05-01
+
+### Completed
+
+**Platform renamed: Forethought → Farfield**
+- All source code, config, and documentation updated
+- External resources (GitHub repo, Vercel project) to be renamed separately when convenient
+
+**Navigation and page architecture defined**
+- Full site brief written covering: six user states, complete route structure, access control matrix, data leakage rules, and four-phase MVP build priority
+- BUILD_PLAN.md updated: platform description revised, Section 2.4 (navigation and user states) added, build phases revised to four phases, project structure and build sequence updated, success metrics revised
+- Articles confirmed as Phase 1 scope
+- Variable slugs confirmed: add slug field to variables table, derive from name + countryCode
+
+### Current state
+
+- **Live site**: forethought-two.vercel.app (URL to be updated when Vercel project is renamed)
+- **Database**: ~17,000 forecasts, ~6,800 actuals, 272 variables, 10 forecasters, 4,116 scored
+- **WEO vintages**: 12 (Apr 2007 – Apr 2026)
+- **Build**: clean, zero errors
+- **Auth**: Google OAuth live
+
+### Known issues
+
+- Public pages currently expose forecast data that should be subscriber-only (landing page MAE leaderboard, variable detail forecast charts)
+- Variable URLs use UUIDs — migration to slugs required before Phase 1 ships
+
+### Next steps (ordered by priority)
+
+1. **Variable slug migration** — add slug to variables schema, populate from name + countryCode, update /variables/[id] routes to /variables/[slug]
+2. **Articles schema** — new tables (articles, article_tags, article_variables, article_forecasters), Drizzle migration
+3. **Public homepage rebuild** — media-style, strip all forecast data, articles/forecaster spotlight/actuals-only variables
+4. **Article listing and detail pages**
+5. **Forecaster directory and profile redesign** — storefront + Farfield trust panel separation, four ranked status states
+6. **Public variable pages** — actuals only, locked premium modules
+7. **Methodology pages** — all four
+8. **Pricing page**
+9. **Server-side access gating** — enforce throughout, audit for data leakage
 
 ## Session 2026-04-21
 
@@ -21,7 +564,7 @@
 
 ### Current state
 
-- **Live site**: forethought-two.vercel.app
+- **Live site**: Farfield-two.vercel.app
 - **Database**: ~17,000 forecasts, ~6,800 actuals, 272 variables, 10 forecasters, 4,116 scored
 - **WEO vintages**: 12 (Apr 2007 – Apr 2026)
 - **Build**: clean, zero errors
@@ -58,7 +601,7 @@
 
 ### Current state
 
-- **Live site**: forethought-two.vercel.app
+- **Live site**: Farfield-two.vercel.app
 - **Database**: ~15,000 forecasts (WEO + OECD EO + WB GEP + ECB MPD + commodity), 272 variables, 10 forecasters, 3,796 scored
 - **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage), ECB MPD (33 vintages)
 - **Build**: clean, zero errors
@@ -71,7 +614,7 @@
 
 ### Current state
 
-- **Live site**: forethought-two.vercel.app
+- **Live site**: Farfield-two.vercel.app
 - **Database**: ~16,000 forecasts, ~5,900 actuals, 272 variables, 10 forecasters, 4,057 scored
 - **Forecasters with data**: IMF WEO (11 vintages), OECD EO (5 editions), World Bank GEP (1 vintage), ECB MPD (33 vintages)
 - **Build**: clean, zero errors
@@ -120,7 +663,7 @@
 
 ### Current state
 
-- **Live site**: forethought-two.vercel.app
+- **Live site**: Farfield-two.vercel.app
 - **Database**: ~13,000 forecasts (macro + commodity), 272 variables, 10 forecasters, 3,339 scored, 74 commodity variables
 - **Scoring**: all existing forecast/actual pairs scored with signed_error, horizon_months, methodology_version v1.0
 - **Auth**: Google OAuth live; sign-in/out working
@@ -155,9 +698,9 @@
 
 ### Current state
 
-- **Live site**: forethought-two.vercel.app
+- **Live site**: Farfield-two.vercel.app
 - **Database**: 23,744 forecasts, 5,174 scored against actuals, 198 variables, 10 forecasters
-- **GitHub**: github.com/jaredjeffery/forethought (auto-deploys on push to main)
+- **GitHub**: github.com/jaredjeffery/Farfield (auto-deploys on push to main)
 - **Build**: clean, zero errors
 
 ### Known issues
