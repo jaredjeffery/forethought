@@ -1,5 +1,34 @@
 ﻿# Farfield — Progress Log
 
+## Session 2026-05-06
+
+### Completed
+
+- Brainstormed the forecaster profile redesign using a browser-based visual companion.
+- Chose a universal modular profile model rather than separate individual/institution templates.
+- Settled on a fixed Farfield trust spine: compact side score rail, flexible middle widgets, and a fixed bottom recommendations section.
+- Decided customer proof should be text-only verified recommendations, not star ratings or numeric customer scores.
+- Wrote `docs/superpowers/specs/2026-05-06-forecaster-profile-redesign.md` for review.
+- Added `.superpowers/` to `.gitignore` so local brainstorming mockups do not enter source control.
+
+### Current state
+
+- No app code has been changed for this redesign yet.
+- The profile redesign is documented as a draft spec awaiting review.
+- Existing public profile implementation remains unchanged and non-leaky.
+
+### Known issues
+
+- Recommendation storage and moderation do not exist yet because transaction-backed marketplace purchases are not live.
+- Exact public score/rank labels still need final copy decisions.
+- Studio profile customisation remains future work.
+
+### Next steps
+
+1. Review and approve or edit the new profile redesign spec.
+2. After approval, write an implementation plan.
+3. Implement the redesigned public profile in small, testable increments.
+
 ## Claude handoff snapshot — 2026-05-03
 
 Read this before continuing work:
