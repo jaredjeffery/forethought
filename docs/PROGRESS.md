@@ -10,6 +10,7 @@
 - Decided customer proof should be text-only verified recommendations, not star ratings or numeric customer scores.
 - Wrote `docs/superpowers/specs/2026-05-06-forecaster-profile-redesign.md` for review.
 - Wrote `docs/superpowers/plans/2026-05-06-forecaster-profile-redesign.md` after spec approval.
+- Updated `docs/BUILD_PLAN.md` so the main platform spec reflects the approved profile direction.
 - Added `.superpowers/` to `.gitignore` so local brainstorming mockups do not enter source control.
 
 ### Current state

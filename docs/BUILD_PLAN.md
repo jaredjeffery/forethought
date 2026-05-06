@@ -691,6 +691,8 @@ Phase 1 scope is Farfield editorial only: editorial, methodology notes, and vari
 
 Directory cards and profiles show public identity, topics covered, ranked status, sample non-leaky trust signals, and a Farfield-controlled trust panel. Profiles keep a strict split between forecaster-controlled storefront fields and Farfield-controlled scoring/performance fields.
 
+Forecaster profiles should move toward the approved universal modular profile model documented in `docs/superpowers/specs/2026-05-06-forecaster-profile-redesign.md`. Individuals, institutions, banks, and research houses use the same profile system so they compete on the same evidence standard. The top of the profile has forecaster-owned positioning beside a compact Farfield score rail. The middle of the profile is made from approved widgets that can later be reordered in Studio. The bottom of every profile has a fixed verified client recommendations section. Customer proof is text-only, paid-customer-only, moderated by Farfield, and never shown as stars or a numeric customer rating.
+
 **1.5 Variable pages (`/variables`, `/variables/[slug]`)**
 
 Public/free pages show actuals history, variable explanation, forecast coverage counts, source labels, forecasters covering the variable, and locked premium modules. No public/free page may expose real consensus values, private or paid forecaster values, vintage history, dispersion, or reconstructive chart data.
@@ -757,6 +759,8 @@ Consensus forecast downloads, actuals datasets, API access, download history, an
 **3.1 Studio home and profile editor (`/studio`, `/studio/profile`)**
 
 Studio home: profile status, ranked status, forecasts due, products live, subscribers, revenue, recent activity. Profile editor controls only forecaster-owned fields and never the Farfield trust panel.
+
+The profile editor should eventually manage the approved modular profile system: headline, short bio, specialties, links, featured widget, and ordered middle-section widgets. It must not allow arbitrary HTML, editing of Farfield scores/ranks, hiding of required track-record or coverage widgets when data exists, or editing/reordering of verified client recommendations.
 
 **3.2 Forecast submission (`/studio/forecasts`)**
 
@@ -987,7 +991,7 @@ Build in this order, deploying and verifying each increment before moving to the
 6. **Variable slug migration** — add slug to variables schema, populate from name + country_code, update all routes from `/variables/[id]` to `/variables/[slug]`.
 7. **Public homepage rebuild** — media-style landing, actuals-only variable cards, article previews, forecaster spotlight, methodology links, and locked premium modules.
 8. **Farfield editorial articles** — public listing/detail pages for Farfield-authored editorial, methodology notes, and variable explainers.
-9. **Forecaster directory and profiles** — filters, ranked status badges, storefront/trust-panel split, and non-leaky performance teasers.
+9. **Forecaster directory and profiles** — filters, ranked status badges, universal modular profile, compact Farfield score rail, approved widgets, fixed verified recommendations empty state, and non-leaky performance teasers.
 10. **Public variable pages** — actuals, coverage indicators, source labels, forecasters covering the variable, and locked premium modules; no real consensus or forecast values for public/free users unless explicitly approved as a legally safe public-source teaser.
 11. **Methodology and pricing pages** — methodology overview/scoring/data-sources/institutions plus pricing focused on subscriber data value.
 
@@ -1002,7 +1006,7 @@ Build in this order, deploying and verifying each increment before moving to the
 
 16. **Studio home and routing** — middleware to gate `/studio` on forecaster role.
 17. **Forecast submission** — variable selection, horizon, values, notes, immutable timestamps, history.
-18. **Profile editor** — forecaster-controlled fields only, public profile preview.
+18. **Profile editor** — forecaster-controlled fields only, approved widget ordering, public profile preview, and no controls for Farfield scores/ranks or verified recommendations.
 19. **Products, paid reports, and articles** — subscriptions, reports, data products, consulting/events, forecaster article submission with moderation.
 20. **Stripe Connect** — KYC/tax collection, payout accounts, platform fees, revenue reporting.
 
@@ -1053,7 +1057,7 @@ Each step should be a working increment — deploy after each one and verify it 
 **Phase 1 — Public showcase MVP:**
 - Public homepage live with articles, forecaster spotlight, and actuals-only variable cards
 - Articles section live with at least three published pieces (IMF WEO vintage-progression analysis as launch editorial)
-- Forecaster directory and profiles live with ranked status badges, trust panel, and storefront layer
+- Forecaster directory and profiles live with ranked status badges, universal modular profiles, compact Farfield score rail, approved widgets, and a fixed verified recommendations section
 - Variable pages show actuals, coverage indicators, source labels, and locked premium modules without exposing forecast values
 - Methodology section complete (all four pages)
 - Zero forecast/consensus data accessible to logged-out or free users unless explicitly approved as a legally safe public-source teaser
