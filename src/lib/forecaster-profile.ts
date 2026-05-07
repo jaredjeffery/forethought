@@ -123,7 +123,7 @@ function formatCount(value: number) {
 export function buildProfileStatus(scoredCount: number, forecastCount: number) {
   if (scoredCount >= 100) {
     return {
-      label: "Ranked benchmark",
+      label: "Scored benchmark",
       detail: "Large scored sample",
       tone: "cobalt" as const,
     };

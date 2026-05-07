@@ -16,24 +16,27 @@
 - Added a public-safe profile model and DB-backed view-model helper.
 - Added modular profile components for hero, Farfield score rail, widgets, and verified recommendations empty state.
 - Extended leakage tests for redesigned public profile sections and no-star customer proof.
+- Browser-reviewed `/forecasters/imf` from the feature worktree and tightened the first visual pass.
+- Moved the public header brand mark to the left, cropped the lockup asset in CSS so it reads at header size, softened the score rail status typography, and changed the high-sample status copy to "Scored benchmark".
 
 ### Current state
 
 - `/forecasters/[slug]` renders the universal modular profile design using existing public-safe data.
 - Recommendations render as a fixed bottom empty state until transaction-backed recommendations exist.
 - Public profile pages still avoid locked forecast values, paid consensus values, private series, and detailed score tables.
+- The active draft PR includes the profile redesign plus the first browser-review polish commit.
 
 ### Known issues
 
 - Recommendation storage and moderation do not exist yet because transaction-backed marketplace purchases are not live.
-- Exact public score/rank labels still need final copy decisions.
+- Exact public rank labels still need final copy decisions once rank calculations are available.
 - Studio profile customisation remains future work.
 - Profile customisation is default-config only; Studio editing is not implemented.
 
 ### Next steps
 
 1. Review several real seeded institution profiles in-browser.
-2. Decide which public score/rank labels should ship in Phase 1.
+2. Decide which public rank labels should ship once Phase 1 rank calculations exist.
 3. Plan Studio profile editing after the public profile model is stable.
 
 ## Claude handoff snapshot — 2026-05-03

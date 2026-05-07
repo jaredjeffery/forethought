@@ -16,7 +16,7 @@ interface ForecasterScoreRailProps {
 
 export function ForecasterScoreRail({ scoreRail }: ForecasterScoreRailProps) {
   return (
-    <Card padding="lg" raised className="h-fit">
+    <Card padding="lg" raised className="h-fit lg:sticky lg:top-24">
       <p className="section-label">{scoreRail.label}</p>
       <div className="mt-5 space-y-4">
         {scoreRail.items.map((item) => (
@@ -25,7 +25,11 @@ export function ForecasterScoreRail({ scoreRail }: ForecasterScoreRailProps) {
               {item.label}
             </p>
             <p
-              className={`mt-1 font-mono text-2xl font-bold tabular-nums ${toneClass[item.tone]}`}
+              className={`mt-1 ${
+                item.label === "Status"
+                  ? "text-lg font-semibold leading-6"
+                  : "font-mono text-2xl font-bold tabular-nums"
+              } ${toneClass[item.tone]}`}
             >
               {item.value}
             </p>

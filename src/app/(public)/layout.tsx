@@ -12,7 +12,18 @@ export default async function PublicLayout({ children }: { children: React.React
         className="sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-md"
         style={{ height: "var(--header-h)" }}
       >
-        <div className="mx-auto flex h-full max-w-[var(--page-max)] items-center justify-between px-[var(--page-px)]">
+        <div className="mx-auto flex h-full max-w-[var(--page-max)] items-center justify-between gap-6 px-[var(--page-px)]">
+          <Link href="/" className="flex shrink-0 items-center" aria-label="Farfield home">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/farfield-lockup.png"
+              alt="Farfield"
+              width={196}
+              height={56}
+              className="h-8 w-[112px] object-cover object-center"
+            />
+          </Link>
+
           <nav className="hidden items-center gap-7 text-[14px] font-medium text-muted md:flex">
             <Link href="/variables" className="transition-colors hover:text-ink">
               Indicators
@@ -54,16 +65,6 @@ export default async function PublicLayout({ children }: { children: React.React
                 Sign in
               </Link>
             )}
-            <Link href="/" className="flex items-center" aria-label="Farfield home">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/brand/farfield-lockup.png"
-                alt="Farfield"
-                width={196}
-                height={56}
-                className="h-[52px] w-auto"
-              />
-            </Link>
           </div>
         </div>
       </header>
