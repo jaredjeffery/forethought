@@ -18,7 +18,6 @@ import { Sparkline } from "@/components/viz/Sparkline";
 import { CoverageMatrix } from "@/components/viz/CoverageMatrix";
 import { PrismDial } from "@/components/viz/PrismDial";
 import { Card } from "@/components/ui/Card";
-import { SectionLabel } from "@/components/ui/SectionLabel";
 
 export const revalidate = 3600;
 
