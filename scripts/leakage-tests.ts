@@ -181,6 +181,20 @@ async function main() {
       `Expected 200, got ${forecasterHtmlResponse.status}`,
     );
     assertNoSampleValues("public forecaster page sample values", forecasterHtml, premiumSampleValues);
+    check(
+      "public forecaster page shows redesigned profile sections",
+      forecasterHtml.includes("Farfield record")
+        && forecasterHtml.includes("Verified Recommendations")
+        && forecasterHtml.includes("No verified client recommendations yet."),
+      "Expected redesigned public profile sections were missing",
+    );
+    check(
+      "public forecaster page avoids customer star ratings",
+      !forecasterHtml.includes("customer rating")
+        && !forecasterHtml.includes("Customer rating")
+        && !forecasterHtml.toLowerCase().includes("star rating"),
+      "Customer star/rating language found in public forecaster HTML",
+    );
 
     const landingResponse = await fetch(baseUrl);
     const landingHtml = await landingResponse.text();

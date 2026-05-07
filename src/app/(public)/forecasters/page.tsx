@@ -30,7 +30,7 @@ async function getForecasters() {
 }
 
 function rankedStatus(scoredCount: number, forecastCount: number) {
-  if (scoredCount >= 100) return "Ranked benchmark";
+  if (scoredCount >= 100) return "Scored benchmark";
   if (scoredCount > 0) return "Building track record";
   if (forecastCount > 0) return "Tracked, awaiting scores";
   return "No tracked forecasts";
